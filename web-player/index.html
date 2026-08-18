@@ -16,6 +16,7 @@
       .eyebrow { margin:0 0 12px; color:var(--lime); font-size:14px; font-weight:650; } h1 { font-size:clamp(35px,6vw,58px); letter-spacing:-.065em; margin:0; line-height:.95 } .byline { color:#bbb; margin:11px 0 0; font-size:16px } .description { max-width:42ch; color:#ededed; line-height:1.5; margin:20px 0 24px }
       .actions { display:flex; gap:12px; flex-wrap:wrap } button, a { appearance:none; border:0; color:#080808; font:inherit; font-weight:750; border-radius:999px; padding:12px 17px; background:var(--lime); cursor:pointer; text-decoration:none; } button.secondary { background:rgba(255,255,255,.1); color:#fff; border:1px solid rgba(255,255,255,.18) } button:focus-visible,a:focus-visible{outline:3px solid #fff;outline-offset:3px}
       .tip { position:absolute; bottom:18px; right:24px; font-size:13px; color:#ffffff9c }
+      dialog { width:min(540px,calc(100vw - 32px)); border:1px solid #ffffff28; border-radius:24px; padding:0; color:white; background:#101014; box-shadow:0 22px 70px #000b } dialog::backdrop{background:#000a;backdrop-filter:blur(5px)} .dialog-content{padding:22px}.dialog-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}.dialog-top h2{margin:0;font-size:23px;letter-spacing:-.04em}.icon-button{padding:7px 11px;background:#ffffff14;color:#fff}.review{padding:14px 0;border-top:1px solid #ffffff18}.review:first-of-type{border-top:0}.review-meta{display:flex;justify-content:space-between;font-size:14px;color:#c9c9cf}.rating{color:var(--lime);font-weight:750}.review p{margin:7px 0 0;line-height:1.45;color:#f5f5f7}.review-form{display:grid;gap:10px;margin-top:17px}.review-form textarea{min-height:74px;resize:vertical;border:1px solid #ffffff2b;border-radius:14px;background:#ffffff0c;color:white;font:inherit;padding:11px}.review-form footer{display:flex;justify-content:space-between;align-items:center}.review-form select{border:0;background:transparent;color:#fff;font:inherit}.review-form option{color:#000}
       @media (max-width:620px) { article { padding:21px; border-radius:22px; margin-bottom:22px }.status span{display:none}.tip{display:none} }
     </style>
   </head>
@@ -28,10 +29,16 @@
         <h1>Kinetic Garden</h1>
         <p class="byline">by @echoform · 12.4K likes</p>
         <p class="description">A living music garden. Move your cursor or tap to plant sounds and grow rhythms.</p>
-        <div class="actions"><button id="remix">Remix this app</button><button id="sound" class="secondary">Enable sound</button></div>
+        <div class="actions"><button id="remix">Remix this app</button><button id="comments" class="secondary">237 comments</button><button id="sound" class="secondary">Enable sound</button></div>
       </article>
       <div class="tip">Tap anywhere to plant a note</div>
     </main>
+    <dialog id="comment-dialog" aria-label="Comments and reviews">
+      <div class="dialog-content"><div class="dialog-top"><h2>Comments · <span id="comment-count">237</span></h2><button class="icon-button" id="close-comments" aria-label="Close comments">×</button></div>
+        <section id="review-list" aria-live="polite"><article class="review"><div class="review-meta"><strong>@mika</strong><span class="rating">★★★★★</span></div><p>The sound response feels wonderfully alive. I keep finding new rhythms.</p></article><article class="review"><div class="review-meta"><strong>@kai.studio</strong><span class="rating">★★★★☆</span></div><p>A beautiful interaction — I would love a slower mode for winding down.</p></article></section>
+        <form id="review-form" class="review-form"><textarea id="review-body" maxlength="500" required placeholder="Write a comment or a thoughtful review…" aria-label="Your comment"></textarea><footer><label>Score <select id="review-score" aria-label="Score"><option value="5">★★★★★</option><option value="4">★★★★☆</option><option value="3">★★★☆☆</option><option value="2">★★☆☆☆</option><option value="1">★☆☆☆☆</option></select></label><button>Post comment</button></footer></form>
+      </div>
+    </dialog>
     <script>
       const canvas = document.querySelector('#garden'), ctx = canvas.getContext('2d');
       let point = { x: innerWidth*.5, y: innerHeight*.62, pulse:0 }, notes=[], sound;
@@ -41,6 +48,9 @@
       function tone(hz){ const o=sound.createOscillator(), g=sound.createGain();o.frequency.value=hz;g.gain.setValueAtTime(.08,sound.currentTime);g.gain.exponentialRampToValueAtTime(.001,sound.currentTime+.35);o.connect(g).connect(sound.destination);o.start();o.stop(sound.currentTime+.36) }
       document.querySelector('#sound').onclick=async()=>{ sound ??=new AudioContext();await sound.resume();document.querySelector('#sound').textContent='Sound on' };
       document.querySelector('#remix').onclick=()=>alert('Open Pulse on iPhone to make your remix.');
+      const dialog=document.querySelector('#comment-dialog'),count=document.querySelector('#comment-count'),list=document.querySelector('#review-list');
+      document.querySelector('#comments').onclick=()=>dialog.showModal();document.querySelector('#close-comments').onclick=()=>dialog.close();
+      document.querySelector('#review-form').onsubmit=(event)=>{event.preventDefault();const body=document.querySelector('#review-body'),score=document.querySelector('#review-score');const stars='★★★★★'.slice(0,Number(score.value))+'☆☆☆☆☆'.slice(Number(score.value));const review=document.createElement('article');review.className='review';review.innerHTML=`<div class="review-meta"><strong>@you</strong><span class="rating">${stars}</span></div><p></p>`;review.querySelector('p').textContent=body.value;list.prepend(review);count.textContent=String(Number(count.textContent)+1);document.querySelector('#comments').textContent=`${count.textContent} comments`;body.value=''};
       function paint(t){ ctx.clearRect(0,0,innerWidth,innerHeight); const g=ctx.createRadialGradient(point.x,point.y,0,point.x,point.y,280);g.addColorStop(0,'rgba(190,255,25,.24)');g.addColorStop(1,'rgba(190,255,25,0)');ctx.fillStyle=g;ctx.fillRect(0,0,innerWidth,innerHeight);
         for(let i=0;i<14;i++){ const y=innerHeight*(.2+i*.045)+Math.sin(t*.001+i)*22;ctx.beginPath();ctx.moveTo(-20,y);ctx.bezierCurveTo(innerWidth*.3,y-65,innerWidth*.7,y+65,innerWidth+20,y+Math.sin(t*.0013+i)*48);ctx.strokeStyle='rgba(134,65,255,.24)';ctx.lineWidth=1;ctx.stroke() }
         notes.forEach((n,i)=>{ n.life-=.004; n.r+=.42;ctx.beginPath();ctx.arc(n.x,n.y,n.r,0,Math.PI*2);ctx.strokeStyle=`hsla(${n.hue},100%,65%,${Math.max(n.life,0)})`;ctx.lineWidth=2;ctx.stroke(); if(n.life<=0)notes.splice(i,1) });
