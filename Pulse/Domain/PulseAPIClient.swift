@@ -1,6 +1,7 @@
 import Foundation
 
 struct PublishResponse: Decodable { let url: URL }
+struct CommentPayload: Encodable { let author: String; let score: Int; let body: String }
 
 struct PulseAPIClient {
     // Swap this development URL for the deployed private API hostname at release time.
@@ -14,5 +15,14 @@ struct PulseAPIClient {
         let (data, response) = try await URLSession.shared.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 201 else { throw URLError(.badServerResponse) }
         return try JSONDecoder().decode(PublishResponse.self, from: data).url
+    }
+
+    func comment(on appID: UUID, author: String, score: Int, body: String) async throws {
+        var request = URLRequest(url: baseURL.appending(path: "apps/\(appID.uuidString)/comments"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(CommentPayload(author: author, score: score, body: body))
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 201 else { throw URLError(.badServerResponse) }
     }
 }
