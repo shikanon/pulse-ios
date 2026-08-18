@@ -6,7 +6,7 @@ Pulse is a native SwiftUI client for browsing, playing, remixing, creating, and 
 
 ## Product slice
 
-- Full-screen, vertically paged interactive feed
+- Full-screen, vertically paged interactive feed with likes and per-work comments/reviews
 - Touch-responsive visual canvas, likes, remix, and browser-share entry points
 - Prompt-led creator flow and remix lineage
 - Private API integration seam in `PulseAPIClient`
