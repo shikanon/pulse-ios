@@ -22,6 +22,7 @@ private struct FeedCard: View {
     let onRemix: () -> Void
     @State private var touchPoint = CGPoint(x: 0.5, y: 0.62)
     @State private var isSharePresented = false
+    @State private var isCommentsPresented = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -39,7 +40,7 @@ private struct FeedCard: View {
                     HStack(alignment: .bottom, spacing: 12) {
                         AppDetails(app: app)
                         Spacer(minLength: 8)
-                        ActionRail(app: app, remix: onRemix, share: { isSharePresented = true })
+                        ActionRail(app: app, comments: { isCommentsPresented = true }, remix: onRemix, share: { isSharePresented = true })
                     }
                     .padding(.bottom, 115)
                 }
@@ -49,6 +50,7 @@ private struct FeedCard: View {
         }
         .ignoresSafeArea()
         .sheet(isPresented: $isSharePresented) { ShareSheet(app: app) }
+        .sheet(isPresented: $isCommentsPresented) { CommentsSheet(app: app) }
     }
 }
 
@@ -78,11 +80,13 @@ private struct AppDetails: View {
 private struct ActionRail: View {
     @Environment(AppModel.self) private var model
     let app: InteractiveApp
+    let comments: () -> Void
     let remix: () -> Void
     let share: () -> Void
     var body: some View {
         VStack(spacing: 19) {
             ActionButton(symbol: app.isLiked ? "heart.fill" : "heart", label: compact(app.likes), tint: app.isLiked ? .pulseCoral : .white) { model.like(app.id) }
+            ActionButton(symbol: "bubble.right", label: compact(app.comments), tint: .white, action: comments)
             ActionButton(symbol: "arrow.triangle.2.circlepath", label: "Remix\n\(compact(app.remixes))", tint: app.accent, action: remix)
             ActionButton(symbol: "square.and.arrow.up", label: "Share", tint: .pulseViolet, action: share)
         }.frame(width: 71)
