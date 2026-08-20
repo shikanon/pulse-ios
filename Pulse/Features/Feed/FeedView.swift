@@ -5,13 +5,26 @@ struct FeedView: View {
     @State private var selectedApp: InteractiveApp?
 
     var body: some View {
-        TabView {
-            ForEach(model.feed) { app in
-                FeedCard(app: app, onRemix: { selectedApp = app })
-                    .tag(app.id)
+        ZStack(alignment: .top) {
+            if model.feed.isEmpty, !model.isLoadingFeed {
+                ContentUnavailableView("The feed is empty", systemImage: "sparkles", description: Text("Create the first interactive app or try loading again."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity).background(.black)
+            } else {
+                TabView {
+                    ForEach(model.feed) { app in
+                        FeedCard(app: app, onRemix: { selectedApp = app })
+                            .tag(app.id)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+            }
+            if model.isLoadingFeed {
+                ProgressView("Loading Pulse…").padding(12).background(.ultraThinMaterial, in: Capsule()).padding(.top, 58)
+            } else if let error = model.feedError {
+                HStack { Image(systemName: "wifi.exclamationmark"); Text(error).lineLimit(1); Button("Retry") { Task { await model.loadFeed() } } }
+                    .font(.caption).padding(10).background(.black.opacity(0.84), in: Capsule()).padding(.top, 58).padding(.horizontal)
             }
         }
-        .tabViewStyle(.page(indexDisplayMode: .never))
         .sheet(item: $selectedApp) { app in RemixSheet(original: app) }
     }
 }
@@ -85,7 +98,7 @@ private struct ActionRail: View {
     let share: () -> Void
     var body: some View {
         VStack(spacing: 19) {
-            ActionButton(symbol: app.isLiked ? "heart.fill" : "heart", label: compact(app.likes), tint: app.isLiked ? .pulseCoral : .white) { model.like(app.id) }
+            ActionButton(symbol: app.isLiked ? "heart.fill" : "heart", label: compact(app.likes), tint: app.isLiked ? .pulseCoral : .white) { Task { await model.toggleLike(app.id) } }
             ActionButton(symbol: "bubble.right", label: compact(app.comments), tint: .white, action: comments)
             ActionButton(symbol: "arrow.triangle.2.circlepath", label: "Remix\n\(compact(app.remixes))", tint: app.accent, action: remix)
             ActionButton(symbol: "square.and.arrow.up", label: "Share", tint: .pulseViolet, action: share)
