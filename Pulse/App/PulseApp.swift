@@ -14,6 +14,7 @@ struct PulseApp: App {
 }
 
 private struct RootView: View {
+    @Environment(AppModel.self) private var appModel
     @State private var selectedTab: AppTab = .home
 
     var body: some View {
@@ -21,7 +22,7 @@ private struct RootView: View {
             Group {
                 switch selectedTab {
                 case .home: FeedView()
-                case .create: CreateView()
+                case .create: CreateView { selectedTab = .home }
                 case .inbox: InboxView()
                 case .profile: ProfileView()
                 }
@@ -33,6 +34,7 @@ private struct RootView: View {
                 .padding(.bottom, 8)
         }
         .ignoresSafeArea(edges: .bottom)
+        .task { await appModel.loadFeed() }
     }
 }
 
@@ -40,6 +42,7 @@ enum AppTab: String, CaseIterable, Identifiable {
     case home, create, inbox, profile
     var id: String { rawValue }
     var label: String { rawValue.capitalized }
+    var accessibilityLabel: String { self == .create ? "Create an original app from one sentence" : label }
     var symbol: String {
         switch self {
         case .home: "house.fill"
