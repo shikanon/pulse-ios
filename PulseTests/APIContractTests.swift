@@ -2,6 +2,19 @@ import XCTest
 @testable import Pulse
 
 final class APIContractTests: XCTestCase {
+    func testCelebrityTankBattleFixtureUsesOriginalCreationPromptAndBundledImages() throws {
+        let prompt = "生成一个各种名人头像的坦克大战"
+        let fileNames = ["abraham-lincoln", "nikola-tesla", "ada-lovelace", "william-shakespeare"]
+        let fixtureBundle = Bundle(for: Self.self)
+
+        XCTAssertFalse(prompt.isEmpty)
+        XCTAssertEqual(Set(fileNames).count, 4)
+        for fileName in fileNames {
+            let url = try XCTUnwrap(fixtureBundle.url(forResource: fileName, withExtension: "jpg"), "Missing test fixture: \(fileName).jpg")
+            XCTAssertGreaterThan(try Data(contentsOf: url).count, 10_000)
+        }
+    }
+
     func testGenerationJobDecodesGoIDKeysAndEmptyCollections() throws {
         let data = Data(#"""
         {

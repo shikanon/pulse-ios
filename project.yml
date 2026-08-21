@@ -32,6 +32,10 @@ targets:
     platform: iOS
     sources:
       - path: PulseTests
+        excludes:
+          - Fixtures
+      - path: PulseTests/Fixtures
+        buildPhase: resources
     dependencies:
       - target: Pulse
     settings:
