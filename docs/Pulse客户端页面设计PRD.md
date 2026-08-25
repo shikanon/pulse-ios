@@ -332,6 +332,7 @@ flowchart TD
 - 预取下一作品元数据、预览图和受限资源。
 - 不同时启动多个 Web Bundle/Canvas。
 - 当前作品失败时显示静态预览和“重新加载”，不阻塞滑到下一条。
+- 已发布作品存在 `artifactId`/`artifactEntryUrl` 时，由客户端 Artifact Player 直接加载服务端不可变 Bundle；底部保留交互安全区，生成作品的触控目标不得落入 Pulse Tab Bar 命中区域。
 
 **状态：**
 
@@ -620,6 +621,7 @@ flowchart TD
 **交互：**
 
 - 预览每次从可复现初始状态开始；提供“重置体验”。
+- C05 与 Feed 复用同一个 Artifact Player 和同一 Artifact URL 解析规则；加载、失败、重试状态由宿主展示，作品内部交互仍由 Bundle 自身处理。
 - 发布进入 H05 场景 B。
 - 修改保留原指令、素材和 Plan，引导用户输入变化点，创建新版本。
 - fallback 不自动发布，必须作者确认。
@@ -939,6 +941,7 @@ stateDiagram-v2
 ### 作品管理与安全
 
 - [ ] 预览 Artifact 与最终发布版本一致。
+- [ ] Feed 与 C05 使用真实 Artifact Player，主交互目标不被 Pulse 底部导航遮挡。
 - [ ] Web Bundle 预览无法访问 Pulse Token、Cookie、宿主 DOM 或未授权网络。
 - [ ] 撤销、删除、举报、账号删除等高风险动作展示影响范围并由服务端确认。
 - [ ] 普通客户端不暴露源码、完整 Agent 轨迹、系统提示词和内部安全报告。

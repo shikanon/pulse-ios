@@ -29,6 +29,8 @@ struct InteractiveApp: Identifiable, Codable, Equatable, Sendable {
     var status: Status
     var verificationGrade: VerificationGrade
     var generationJobID: UUID?
+    var artifactID: UUID?
+    var artifactEntryURL: String?
     var publicSlug: String?
     var publicURL: URL?
     var likes: Int
@@ -40,7 +42,11 @@ struct InteractiveApp: Identifiable, Codable, Equatable, Sendable {
         case id, title, creator, prompt, theme, tint, interaction, creationMode
         case parentID = "parentId"
         case rootWorkID = "rootWorkId"
-        case originalCreator, allowRemix, status, verificationGrade, generationJobID, publicSlug
+        case originalCreator, allowRemix, status, verificationGrade
+        case generationJobID = "generationJobId"
+        case artifactID = "artifactId"
+        case artifactEntryURL = "artifactEntryUrl"
+        case publicSlug
         case publicURL = "publicUrl"
         case likes, comments, remixes
         case isLiked = "viewerHasLiked"
@@ -52,7 +58,8 @@ struct InteractiveApp: Identifiable, Codable, Equatable, Sendable {
         interaction: InteractionKind, creationMode: CreationMode = .original,
         rootWorkID: UUID? = nil, originalCreator: String? = nil, allowRemix: Bool = true,
         status: Status = .published, verificationGrade: VerificationGrade = .verified,
-        generationJobID: UUID? = nil, publicSlug: String? = nil, publicURL: URL? = nil,
+        generationJobID: UUID? = nil, artifactID: UUID? = nil, artifactEntryURL: String? = nil,
+        publicSlug: String? = nil, publicURL: URL? = nil,
         isLiked: Bool = false
     ) {
         self.id = id
@@ -73,6 +80,8 @@ struct InteractiveApp: Identifiable, Codable, Equatable, Sendable {
         self.status = status
         self.verificationGrade = verificationGrade
         self.generationJobID = generationJobID
+        self.artifactID = artifactID
+        self.artifactEntryURL = artifactEntryURL
         self.publicSlug = publicSlug
         self.publicURL = publicURL
         self.isLiked = isLiked

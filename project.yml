@@ -42,3 +42,24 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.shikanon.pulse.tests
+  PulseUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: PulseUITests
+    dependencies:
+      - target: Pulse
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.shikanon.pulse.uitests
+schemes:
+  PulseGenerationE2E:
+    build:
+      targets:
+        Pulse: all
+        PulseUITests:
+          - test
+    test:
+      targets:
+        - PulseUITests
