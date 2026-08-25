@@ -8,6 +8,10 @@ final class AppModel {
     var myWorks: [InteractiveApp] = []
     var creatorName = "you"
     var comments: [UUID: [AppComment]] = [:]
+    var publicAssets: [GenerationAsset] = []
+    var privateAssets: [GenerationAsset] = []
+    var isLoadingAssetLibrary = false
+    var assetLibraryError: String?
     var isLoadingFeed = false
     var feedError: String?
     var profileError: String?
@@ -50,8 +54,24 @@ final class AppModel {
         if let index = feed.firstIndex(where: { $0.id == appID }) { feed[index].comments += 1 }
     }
 
-    func registerAsset(fileName: String, mediaType: String, sizeBytes: Int) async throws -> GenerationAsset {
-        try await api.registerAsset(fileName: fileName, mediaType: mediaType, sizeBytes: sizeBytes)
+    func registerAsset(fileName: String, mediaType: String, data: Data) async throws -> GenerationAsset {
+        let asset = try await api.registerAsset(fileName: fileName, mediaType: mediaType, data: data)
+        privateAssets.removeAll { $0.id == asset.id }
+        privateAssets.insert(asset, at: 0)
+        return asset
+    }
+
+    func loadAssetLibrary() async {
+        isLoadingAssetLibrary = true
+        defer { isLoadingAssetLibrary = false }
+        do {
+            let assets = try await api.fetchAssetLibrary()
+            publicAssets = assets.filter { $0.library == .public }
+            privateAssets = assets.filter { $0.library == .private }
+            assetLibraryError = nil
+        } catch {
+            assetLibraryError = error.localizedDescription
+        }
     }
 
     func beginGeneration(instruction: String, parent: InteractiveApp?, assets: [GenerationAsset]) async throws -> (InteractiveApp, GenerationJob) {

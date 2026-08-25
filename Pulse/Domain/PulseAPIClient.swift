@@ -52,10 +52,27 @@ struct PulseAPIClient: Sendable {
         return try await send(path: "works/\(workID.pulsePathComponent)/comments", method: "POST", body: payload, as: CommentEnvelope.self).comment
     }
 
-    func registerAsset(fileName: String, mediaType: String, sizeBytes: Int) async throws -> GenerationAsset {
-        let payload = AssetPayload(fileName: fileName, mediaType: mediaType, sizeBytes: sizeBytes)
-        let created = try await send(path: "assets/uploads", method: "POST", body: payload, as: AssetEnvelope.self).asset
-        return try await send(path: "assets/uploads/\(created.id.pulsePathComponent)/complete", method: "POST", as: AssetEnvelope.self).asset
+    func registerAsset(fileName: String, mediaType: String, data: Data) async throws -> GenerationAsset {
+        let payload = AssetPayload(fileName: fileName, mediaType: mediaType, sizeBytes: data.count)
+        let session = try await send(path: "assets/uploads", method: "POST", body: payload, as: AssetUploadEnvelope.self)
+        if let upload = session.upload {
+            guard let url = URL(string: upload.url) else { throw PulseAPIError(message: "Pulse API returned an invalid OSS upload URL.") }
+            var request = URLRequest(url: url)
+            request.httpMethod = upload.method
+            request.httpBody = data
+            upload.headers.forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
+                throw PulseAPIError(message: "The resource could not be uploaded to OSS.")
+            }
+        } else if session.uploadMode != "metadata-only-local" {
+            throw PulseAPIError(message: "Pulse API did not return an OSS upload grant.")
+        }
+        return try await send(path: "assets/uploads/\(session.asset.id.pulsePathComponent)/complete", method: "POST", as: AssetEnvelope.self).asset
+    }
+
+    func fetchAssetLibrary() async throws -> [GenerationAsset] {
+        try await send(path: "assets/library", as: ListEnvelope<GenerationAsset>.self).data
     }
 
     func createWork(instruction: String, parent: InteractiveApp?) async throws -> InteractiveApp {
@@ -143,6 +160,12 @@ private struct ListEnvelope<Item: Decodable>: Decodable { let data: [Item] }
 private struct WorkEnvelope: Decodable { let work: InteractiveApp }
 private struct CommentEnvelope: Decodable { let comment: AppComment }
 private struct AssetEnvelope: Decodable { let asset: GenerationAsset }
+private struct AssetUploadEnvelope: Decodable {
+    struct Upload: Decodable { let method: String; let url: String; let headers: [String: String]; let expiresAt: Date }
+    let asset: GenerationAsset
+    let uploadMode: String
+    let upload: Upload?
+}
 private struct GenerationEnvelope: Decodable { let generation: GenerationJob }
 private struct PlanEnvelope: Decodable { let plan: GenerationPlan }
 private struct ErrorEnvelope: Decodable { struct APIError: Decodable { let message: String }; let error: APIError }

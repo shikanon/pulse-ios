@@ -1,15 +1,62 @@
 import Foundation
 
-struct GenerationAsset: Identifiable, Codable, Equatable, Sendable {
+struct GenerationAsset: Identifiable, Decodable, Equatable, Sendable {
     enum Status: String, Codable, Sendable { case uploading, ready }
+    enum Library: String, Codable, Sendable { case `public`, `private` }
+    enum Source: String, Codable, Sendable { case official, upload }
+    enum Kind: String, Codable, Sendable { case image, audio, video }
+
     let id: UUID
     let owner: String
+    let library: Library
+    let source: Source
+    let kind: Kind
+    let displayName: String
     let fileName: String
     let mediaType: String
     let sizeBytes: Int
     let status: Status
     let summary: String?
+    let license: String?
+    let deliveryURL: URL?
     let confidence: Double?
+
+    private enum CodingKeys: String, CodingKey {
+        case id, owner, library, source, kind, displayName, fileName, mediaType, sizeBytes, status, summary, license, confidence
+        case deliveryURL = "deliveryUrl"
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        owner = try values.decode(String.self, forKey: .owner)
+        fileName = try values.decode(String.self, forKey: .fileName)
+        mediaType = try values.decode(String.self, forKey: .mediaType)
+        sizeBytes = try values.decode(Int.self, forKey: .sizeBytes)
+        status = try values.decode(Status.self, forKey: .status)
+        library = try values.decodeIfPresent(Library.self, forKey: .library) ?? .private
+        source = try values.decodeIfPresent(Source.self, forKey: .source) ?? .upload
+        kind = try values.decodeIfPresent(Kind.self, forKey: .kind) ?? Self.kind(for: mediaType)
+        displayName = try values.decodeIfPresent(String.self, forKey: .displayName) ?? fileName
+        summary = try values.decodeIfPresent(String.self, forKey: .summary)
+        license = try values.decodeIfPresent(String.self, forKey: .license)
+        deliveryURL = try values.decodeIfPresent(URL.self, forKey: .deliveryURL)
+        confidence = try values.decodeIfPresent(Double.self, forKey: .confidence)
+    }
+
+    var iconName: String {
+        switch kind {
+        case .image: "photo.fill"
+        case .audio: "music.note"
+        case .video: "video.fill"
+        }
+    }
+
+    private static func kind(for mediaType: String) -> Kind {
+        if mediaType.hasPrefix("audio/") { return .audio }
+        if mediaType.hasPrefix("video/") { return .video }
+        return .image
+    }
 }
 
 struct GenerationJob: Identifiable, Codable, Equatable, Sendable {

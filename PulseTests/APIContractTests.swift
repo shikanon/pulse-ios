@@ -52,6 +52,49 @@ final class APIContractTests: XCTestCase {
         XCTAssertEqual(interaction.rawValue, "touch-garden")
     }
 
+    func testResourceLibraryDecodesPublicBGMAndLegacyPrivateAsset() throws {
+        let publicData = Data(#"""
+        {
+          "id":"10000000-0000-4000-8000-000000000003",
+          "owner":"pulse-official",
+          "library":"public",
+          "source":"official",
+          "kind":"audio",
+          "displayName":"Arcade Rush BGM",
+          "fileName":"arcade-rush.mp3",
+          "mediaType":"audio/mpeg",
+          "sizeBytes":0,
+          "status":"ready",
+          "summary":"High-energy loop",
+          "license":"Pulse Official",
+          "deliveryUrl":"https://cdn.ai.lovetalk.chat/public/assets/v1/arcade-rush.mp3"
+        }
+        """#.utf8)
+        let publicAsset = try JSONDecoder().decode(GenerationAsset.self, from: publicData)
+        XCTAssertEqual(publicAsset.library, .public)
+        XCTAssertEqual(publicAsset.source, .official)
+        XCTAssertEqual(publicAsset.kind, .audio)
+        XCTAssertEqual(publicAsset.iconName, "music.note")
+        XCTAssertEqual(publicAsset.deliveryURL?.host, "cdn.ai.lovetalk.chat")
+
+        let legacyData = Data(#"""
+        {
+          "id":"9a910ce7-b47a-45df-9ff7-84639a806865",
+          "owner":"you",
+          "fileName":"portrait.png",
+          "mediaType":"image/png",
+          "sizeBytes":128,
+          "status":"ready"
+        }
+        """#.utf8)
+        let legacyAsset = try JSONDecoder().decode(GenerationAsset.self, from: legacyData)
+        XCTAssertEqual(legacyAsset.library, .private)
+        XCTAssertEqual(legacyAsset.source, .upload)
+        XCTAssertEqual(legacyAsset.kind, .image)
+        XCTAssertEqual(legacyAsset.displayName, "portrait.png")
+        XCTAssertNil(legacyAsset.deliveryURL)
+    }
+
     func testPublishedWorkDecodesArtifactPlayerContract() throws {
         let data = Data(#"""
         {

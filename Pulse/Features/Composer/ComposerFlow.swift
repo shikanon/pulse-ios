@@ -43,6 +43,8 @@ private struct ComposerFlow: View {
     @State private var isPublishing = false
     @State private var errorMessage: String?
     @State private var isPlanPresented = false
+    @State private var isResourceLibraryPresented = false
+    @State private var isBGMImporterPresented = false
 
     init(parent: InteractiveApp?, initialPrompt: String, onPublished: @escaping (InteractiveApp) -> Void) {
         self.parent = parent
@@ -56,7 +58,13 @@ private struct ComposerFlow: View {
                 if job.stage.isTerminal { PreviewSurface(work: work, job: job, plan: plan, isPublishing: isPublishing, publish: publish, showPlan: { isPlanPresented = true }) }
                 else { ProgressSurface(work: work, job: job, hasPlan: plan != nil, showPlan: { isPlanPresented = true }) }
             } else {
-                InputSurface(parent: parent, prompt: $prompt, pickerItems: $pickerItems, assets: assets, isImporting: isImporting, isSubmitting: isSubmitting, errorMessage: errorMessage, submit: submit)
+                InputSurface(
+                    parent: parent, prompt: $prompt, pickerItems: $pickerItems, assets: assets,
+                    isImporting: isImporting, isSubmitting: isSubmitting, errorMessage: errorMessage,
+                    browseLibrary: { isResourceLibraryPresented = true },
+                    importBGM: { isBGMImporterPresented = true },
+                    removeAsset: { id in assets.removeAll { $0.id == id } }, submit: submit
+                )
             }
         }
         .background(Color.black.ignoresSafeArea())
@@ -64,6 +72,10 @@ private struct ComposerFlow: View {
         .onChange(of: pickerItems) { _, items in Task { await importAssets(items) } }
         .task(id: job?.id) { await pollGeneration() }
         .sheet(isPresented: $isPlanPresented) { if let plan { PlanSummaryView(plan: plan) } }
+        .sheet(isPresented: $isResourceLibraryPresented) { ResourceLibrarySheet(selectedAssets: $assets) }
+        .fileImporter(isPresented: $isBGMImporterPresented, allowedContentTypes: [.audio], allowsMultipleSelection: false) { result in
+            Task { await importBGM(result) }
+        }
     }
 
     private func submit() {
@@ -93,14 +105,45 @@ private struct ComposerFlow: View {
                 guard let data = try await item.loadTransferable(type: Data.self) else { continue }
                 let type = item.supportedContentTypes.first ?? .data
                 let extensionName = type.preferredFilenameExtension ?? "bin"
-                let asset = try await model.registerAsset(fileName: "pulse-material-\(index + 1).\(extensionName)", mediaType: type.preferredMIMEType ?? "application/octet-stream", sizeBytes: data.count)
+                let asset = try await model.registerAsset(fileName: "pulse-material-\(index + 1).\(extensionName)", mediaType: type.preferredMIMEType ?? "application/octet-stream", data: data)
                 imported.append(asset)
             }
-            assets = imported
+            mergeAssets(imported)
+            pickerItems = []
         } catch {
             errorMessage = "One selected material could not be prepared: \(error.localizedDescription)"
         }
         isImporting = false
+    }
+
+    private func importBGM(_ result: Result<[URL], Error>) async {
+        isImporting = true
+        errorMessage = nil
+        do {
+            guard let url = try result.get().first else {
+                isImporting = false
+                return
+            }
+            let hasAccess = url.startAccessingSecurityScopedResource()
+            defer { if hasAccess { url.stopAccessingSecurityScopedResource() } }
+            let values = try url.resourceValues(forKeys: [.contentTypeKey])
+            let mediaType = values.contentType?.preferredMIMEType ?? "audio/mpeg"
+            guard mediaType.hasPrefix("audio/") else {
+                throw PulseAPIError(message: "Please choose an audio file for BGM.")
+            }
+            let data = try Data(contentsOf: url)
+            let asset = try await model.registerAsset(fileName: url.lastPathComponent, mediaType: mediaType, data: data)
+            mergeAssets([asset])
+        } catch {
+            errorMessage = "The selected BGM could not be prepared: \(error.localizedDescription)"
+        }
+        isImporting = false
+    }
+
+    private func mergeAssets(_ additions: [GenerationAsset]) {
+        for asset in additions where !assets.contains(where: { $0.id == asset.id }) {
+            assets.append(asset)
+        }
     }
 
     private func pollGeneration() async {
@@ -144,6 +187,9 @@ private struct InputSurface: View {
     let isImporting: Bool
     let isSubmitting: Bool
     let errorMessage: String?
+    let browseLibrary: () -> Void
+    let importBGM: () -> Void
+    let removeAsset: (UUID) -> Void
     let submit: () -> Void
 
     var body: some View {
@@ -174,17 +220,35 @@ private struct InputSurface: View {
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
-                    HStack { Text("Materials").font(.headline); Spacer(); Text("Optional").font(.caption).foregroundStyle(.secondary) }
+                    HStack { Text("Resource library").font(.headline); Spacer(); Text("Optional").font(.caption).foregroundStyle(.secondary) }
+                    Button(action: browseLibrary) {
+                        Label("Browse public and private resources", systemImage: "square.grid.2x2")
+                            .frame(maxWidth: .infinity).padding(.vertical, 13)
+                    }
+                    .buttonStyle(.borderedProminent).tint(.pulseViolet)
+                    .disabled(isImporting || isSubmitting)
+                    .accessibilityIdentifier("creation.resource-library")
                     PhotosPicker(selection: $pickerItems, maxSelectionCount: 4, matching: .any(of: [.images, .videos])) {
-                        Label(isImporting ? "Understanding selected materials…" : "Add images or videos", systemImage: "photo.on.rectangle.angled")
+                        Label(isImporting ? "Preparing resources…" : "Upload private images or videos", systemImage: "photo.on.rectangle.angled")
+                            .frame(maxWidth: .infinity).padding(.vertical, 13)
+                    }
+                    .buttonStyle(.bordered).tint(.white).disabled(isImporting || isSubmitting)
+                    Button(action: importBGM) {
+                        Label("Upload private BGM", systemImage: "music.note.list")
                             .frame(maxWidth: .infinity).padding(.vertical, 13)
                     }
                     .buttonStyle(.bordered).tint(.white).disabled(isImporting || isSubmitting)
                     ForEach(assets) { asset in
                         HStack(spacing: 12) {
-                            Image(systemName: asset.mediaType.hasPrefix("video/") ? "video.fill" : "photo.fill").foregroundStyle(Color.pulseViolet)
-                            VStack(alignment: .leading, spacing: 3) { Text(asset.fileName).font(.subheadline.weight(.semibold)); Text(asset.summary ?? "Ready for generation").font(.caption).foregroundStyle(.secondary).lineLimit(2) }
-                            Spacer(); Label("Ready", systemImage: "checkmark.circle.fill").font(.caption2).foregroundStyle(Color.pulseLime)
+                            Image(systemName: asset.iconName).foregroundStyle(Color.pulseViolet)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(asset.displayName).font(.subheadline.weight(.semibold))
+                                Text(asset.library == .public ? "Official public resource" : "Your private resource").font(.caption2).foregroundStyle(asset.library == .public ? Color.pulseLime : .secondary)
+                                Text(asset.summary ?? "Ready for generation").font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                            }
+                            Spacer()
+                            Button { removeAsset(asset.id) } label: { Image(systemName: "xmark.circle.fill") }
+                                .foregroundStyle(.secondary).accessibilityLabel("Remove \(asset.displayName)")
                         }.padding(12).background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
                     }
                 }
@@ -198,6 +262,93 @@ private struct InputSurface: View {
                 .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmitting || isImporting)
                 .accessibilityIdentifier("creation.generate")
             }.padding(.horizontal, 22).padding(.top, 22).padding(.bottom, 120)
+        }
+    }
+}
+
+private struct ResourceLibrarySheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @Binding var selectedAssets: [GenerationAsset]
+    @State private var selectedLibrary: GenerationAsset.Library = .public
+
+    private var resources: [GenerationAsset] {
+        selectedLibrary == .public ? model.publicAssets : model.privateAssets
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                Picker("Resource library", selection: $selectedLibrary) {
+                    Text("Public").tag(GenerationAsset.Library.public)
+                    Text("Private").tag(GenerationAsset.Library.private)
+                }
+                .pickerStyle(.segmented)
+                .padding()
+                .accessibilityIdentifier("resource-library.scope")
+
+                if model.isLoadingAssetLibrary, resources.isEmpty {
+                    Spacer()
+                    ProgressView("Loading resources…")
+                    Spacer()
+                } else if let error = model.assetLibraryError, resources.isEmpty {
+                    ContentUnavailableView {
+                        Label("Resource library unavailable", systemImage: "wifi.exclamationmark")
+                    } description: {
+                        Text(error)
+                    } actions: {
+                        Button("Try again") { Task { await model.loadAssetLibrary() } }
+                    }
+                } else if resources.isEmpty {
+                    ContentUnavailableView(
+                        "No private resources yet", systemImage: "tray",
+                        description: Text("Upload an image or BGM from the creation screen and it will appear here.")
+                    )
+                } else {
+                    List(resources) { asset in
+                        Button { toggle(asset) } label: {
+                            HStack(spacing: 13) {
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(asset.kind == .audio ? Color.pulseViolet.opacity(0.24) : Color.pulseLime.opacity(0.18))
+                                    .frame(width: 52, height: 52)
+                                    .overlay(Image(systemName: asset.iconName).foregroundStyle(asset.kind == .audio ? Color.pulseViolet : Color.pulseLime))
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(asset.displayName).font(.headline).foregroundStyle(.primary)
+                                    Text(asset.kind == .audio ? "BGM" : asset.kind.rawValue.capitalized)
+                                        .font(.caption2.weight(.bold)).foregroundStyle(.secondary)
+                                    Text(asset.summary ?? "Ready for generation").font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                                    if let license = asset.license { Text(license).font(.caption2).foregroundStyle(Color.pulseLime).lineLimit(1) }
+                                }
+                                Spacer()
+                                Image(systemName: isSelected(asset) ? "checkmark.circle.fill" : "circle")
+                                    .font(.title3).foregroundStyle(isSelected(asset) ? Color.pulseLime : .secondary)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                        .disabled(!isSelected(asset) && selectedAssets.count >= 8)
+                        .accessibilityLabel("\(isSelected(asset) ? "Remove" : "Select") \(asset.displayName)")
+                    }
+                    .listStyle(.plain)
+                }
+            }
+            .navigationTitle("Resource Library")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } }
+            }
+        }
+        .task { await model.loadAssetLibrary() }
+    }
+
+    private func isSelected(_ asset: GenerationAsset) -> Bool {
+        selectedAssets.contains { $0.id == asset.id }
+    }
+
+    private func toggle(_ asset: GenerationAsset) {
+        if isSelected(asset) {
+            selectedAssets.removeAll { $0.id == asset.id }
+        } else if selectedAssets.count < 8 {
+            selectedAssets.append(asset)
         }
     }
 }

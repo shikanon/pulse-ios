@@ -1,6 +1,6 @@
 # Pulse iOS
 
-Pulse 是原生 SwiftUI 客户端，已连通 Go API 的发现、点赞、评论、底部“一句话创作”、基于现有作品的 Remix、素材登记、生成进度、Plan 查看、验收结果、Artifact 预览与 Feed 内游玩、发布、个人作品和公开分享。
+Pulse 是原生 SwiftUI 客户端，已连通 Go API 的发现、点赞、评论、底部“一句话创作”、基于现有作品的 Remix、官方公共/用户私有资源库、图片与 BGM 选择、阿里云 OSS 短时签名直传、生成进度、Plan 查看、验收结果、Artifact 预览与 Feed 内游玩、发布、个人作品和公开分享。
 
 ## 运行
 
@@ -48,7 +48,7 @@ scripts/run-snake-generation-xcuitest.sh
 - `Domain`：服务端 DTO、原创/Remix 血缘、生成阶段和 `PulseAPIClient`。
 - `Features/Feed`：全屏互动 Feed、点赞和评论。
 - `Features/Player`：基于 `WKWebView` 的 Artifact Player；使用非持久化数据存储、同 Artifact 目录导航白名单和服务端 CSP，在 Feed 与发布前预览中运行已验收 Bundle。
-- `Features/Composer`：原创与 Remix 共用的创作、Plan、生成、验收与发布流程。
+- `Features/Composer`：原创与 Remix 共用的公共/私有资源选择、私有图片/BGM 上传、Plan、生成、验收与发布流程。
 - `Features/Profile`：当前用户作品状态。
 - `web-player`：公开作品宿主页；按 `/a/:slug` 从 Go API 读取已发布作品。
 
