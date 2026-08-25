@@ -18,6 +18,18 @@ open Pulse.xcodeproj
 xcodebuild -project Pulse.xcodeproj -scheme Pulse -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
 ```
 
+## XCTest 自动化闭环
+
+本机安装 Xcode 26.5 与 iOS 26.5 Simulator Runtime 后，执行：
+
+```bash
+scripts/run-xctest.sh
+```
+
+脚本会创建一次性 iPhone Simulator、生成 Xcode 工程、启动并等待模拟器、真实执行 XCTest、保存 `.xcresult`，最后关闭并删除测试设备。测试结果默认写入 `.artifacts/xctest/`；任一准备、编译、资源或 XCTest 断言失败都会返回非零状态。
+
+GitHub Actions 使用 `.github/workflows/ios-xctest.yml` 运行同一个入口，固定选择 `macos-26`、Xcode 26.5 和 iOS 26.5 Runtime，并在成功或失败时上传 `.xcresult` 供诊断。
+
 ## 核心边界
 
 - `App`：导航与跨页面状态。

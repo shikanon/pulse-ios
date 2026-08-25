@@ -2,3 +2,4 @@
 Pulse.xcodeproj
 DerivedData
 *.xcuserstate
+.artifacts/
