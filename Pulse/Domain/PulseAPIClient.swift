@@ -6,8 +6,29 @@ struct PulseAPIError: LocalizedError, Sendable {
 }
 
 struct PulseAPIClient: Sendable {
-    var baseURL = URL(string: "http://localhost:8787/v1")!
-    var viewer = "you"
+    let baseURL: URL
+    let viewer: String
+
+    init(baseURL: URL? = nil, viewer: String = "you") {
+        let configured = ProcessInfo.processInfo.environment["PULSE_API_BASE_URL"]
+        self.baseURL = baseURL ?? configured.flatMap(URL.init(string:)) ?? URL(string: "http://localhost:8787/v1")!
+        self.viewer = viewer
+    }
+
+    func artifactEntryURL(id: UUID) -> URL {
+        baseURL.appending(path: "artifacts/\(id.pulsePathComponent)/files/index.html")
+    }
+
+    func resolveArtifactEntryURL(_ value: String, artifactID: UUID) -> URL? {
+        let allowedDirectory = baseURL.appending(path: "artifacts/\(artifactID.pulsePathComponent)/files/")
+        guard let resolved = URL(string: value, relativeTo: apiOrigin)?.absoluteURL,
+              resolved.scheme == apiOrigin.scheme,
+              resolved.host == apiOrigin.host,
+              resolved.port == apiOrigin.port,
+              resolved.path.hasPrefix(allowedDirectory.path)
+        else { return nil }
+        return resolved
+    }
 
     func fetchFeed() async throws -> [InteractiveApp] {
         try await send(path: "feed", as: ListEnvelope<InteractiveApp>.self).data
@@ -107,6 +128,14 @@ struct PulseAPIClient: Sendable {
             throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid RFC 3339 timestamp")
         }
         return decoder
+    }
+
+    private var apiOrigin: URL {
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        components.path = "/"
+        components.query = nil
+        components.fragment = nil
+        return components.url!
     }
 }
 

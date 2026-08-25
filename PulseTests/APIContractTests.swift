@@ -2,6 +2,19 @@ import XCTest
 @testable import Pulse
 
 final class APIContractTests: XCTestCase {
+    func testCelebrityTankBattleFixtureUsesOriginalCreationPromptAndBundledImages() throws {
+        let prompt = "生成一个各种名人头像的坦克大战"
+        let fileNames = ["abraham-lincoln", "nikola-tesla", "ada-lovelace", "william-shakespeare"]
+        let fixtureBundle = Bundle(for: Self.self)
+
+        XCTAssertFalse(prompt.isEmpty)
+        XCTAssertEqual(Set(fileNames).count, 4)
+        for fileName in fileNames {
+            let url = try XCTUnwrap(fixtureBundle.url(forResource: fileName, withExtension: "jpg"), "Missing test fixture: \(fileName).jpg")
+            XCTAssertGreaterThan(try Data(contentsOf: url).count, 10_000)
+        }
+    }
+
     func testGenerationJobDecodesGoIDKeysAndEmptyCollections() throws {
         let data = Data(#"""
         {
@@ -37,6 +50,48 @@ final class APIContractTests: XCTestCase {
     func testInteractionKindPreservesServerExtensions() throws {
         let interaction = try JSONDecoder().decode(InteractiveApp.InteractionKind.self, from: Data("\"touch-garden\"".utf8))
         XCTAssertEqual(interaction.rawValue, "touch-garden")
+    }
+
+    func testPublishedWorkDecodesArtifactPlayerContract() throws {
+        let data = Data(#"""
+        {
+          "id":"59bcc7cc-7363-4413-8b79-b700667f2dde",
+          "title":"Neon Snake",
+          "creator":"you",
+          "prompt":"生成疯狂版本的贪吃蛇",
+          "theme":"Hyper arcade",
+          "tint":"lime",
+          "interaction":"game",
+          "creationMode":"original",
+          "rootWorkId":"59bcc7cc-7363-4413-8b79-b700667f2dde",
+          "originalCreator":"you",
+          "allowRemix":true,
+          "status":"published",
+          "verificationGrade":"degraded",
+          "generationJobId":"8c92f064-fc35-4c91-a83e-f40e52ed89d3",
+          "artifactId":"30b86b66-7fd2-4cdc-9dc2-0733f4e64c25",
+          "artifactEntryUrl":"/v1/artifacts/30b86b66-7fd2-4cdc-9dc2-0733f4e64c25/files/index.html",
+          "likes":0,
+          "comments":0,
+          "remixes":0,
+          "viewerHasLiked":false
+        }
+        """#.utf8)
+
+        let work = try JSONDecoder().decode(InteractiveApp.self, from: data)
+
+        XCTAssertEqual(work.artifactID?.uuidString.lowercased(), "30b86b66-7fd2-4cdc-9dc2-0733f4e64c25")
+        XCTAssertEqual(work.artifactEntryURL, "/v1/artifacts/30b86b66-7fd2-4cdc-9dc2-0733f4e64c25/files/index.html")
+    }
+
+    func testArtifactURLResolutionStaysOnAPIOrigin() throws {
+        let client = PulseAPIClient(baseURL: try XCTUnwrap(URL(string: "http://localhost:8787/v1")))
+        let relative = "/v1/artifacts/30b86b66-7fd2-4cdc-9dc2-0733f4e64c25/files/index.html"
+
+        let artifactID = try XCTUnwrap(UUID(uuidString: "30b86b66-7fd2-4cdc-9dc2-0733f4e64c25"))
+        XCTAssertEqual(client.resolveArtifactEntryURL(relative, artifactID: artifactID)?.absoluteString, "http://localhost:8787/v1/artifacts/30b86b66-7fd2-4cdc-9dc2-0733f4e64c25/files/index.html")
+        XCTAssertNil(client.resolveArtifactEntryURL("https://attacker.example/game.html", artifactID: artifactID))
+        XCTAssertNil(client.resolveArtifactEntryURL("/v1/feed", artifactID: artifactID))
     }
 
     func testCommentMapsWorkID() throws {

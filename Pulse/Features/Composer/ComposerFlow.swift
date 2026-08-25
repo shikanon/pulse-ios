@@ -170,6 +170,7 @@ private struct InputSurface: View {
                         .scrollContentBackground(.hidden).frame(minHeight: 145).padding(12)
                         .background(.white.opacity(0.075), in: RoundedRectangle(cornerRadius: 18))
                         .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.12)))
+                        .accessibilityIdentifier("creation.prompt")
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
@@ -195,6 +196,7 @@ private struct InputSurface: View {
                 }
                 .buttonStyle(.borderedProminent).tint(.pulseLime).foregroundStyle(.black)
                 .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmitting || isImporting)
+                .accessibilityIdentifier("creation.generate")
             }.padding(.horizontal, 22).padding(.top, 22).padding(.bottom, 120)
         }
     }
@@ -248,6 +250,7 @@ private struct ProgressSurface: View {
 }
 
 private struct PreviewSurface: View {
+    @Environment(AppModel.self) private var model
     let work: InteractiveApp
     let job: GenerationJob
     let plan: GenerationPlan?
@@ -262,9 +265,19 @@ private struct PreviewSurface: View {
                 Text(job.verificationGrade == .fallback ? "A safe version is ready" : "Your interactive app is ready")
                     .font(.system(size: 30, weight: .bold, design: .rounded))
                 GeometryReader { proxy in
-                    LivingCanvas(app: work, touchPoint: touch)
-                        .gesture(DragGesture(minimumDistance: 0).onChanged { value in touch = CGPoint(x: value.location.x / proxy.size.width, y: value.location.y / proxy.size.height) })
+                    if let artifactID = job.artifactID {
+                        ArtifactPlayerView(
+                            url: model.artifactURL(for: artifactID),
+                            accessibilityIdentifier: "generation.artifact.player"
+                        )
                         .clipShape(RoundedRectangle(cornerRadius: 24))
+                    } else {
+                        LivingCanvas(app: work, touchPoint: touch)
+                            .gesture(DragGesture(minimumDistance: 0).onChanged { value in touch = CGPoint(x: value.location.x / proxy.size.width, y: value.location.y / proxy.size.height) })
+                            .accessibilityIdentifier("generation.preview.canvas")
+                            .accessibilityValue("touch-x-\(Int(touch.x * 100))-y-\(Int(touch.y * 100))")
+                            .clipShape(RoundedRectangle(cornerRadius: 24))
+                    }
                 }.frame(height: 360)
                 HStack { Label(job.verificationGrade.rawValue.capitalized, systemImage: job.verificationGrade == .fallback ? "shield.lefthalf.filled" : "checkmark.seal.fill").foregroundStyle(job.verificationGrade == .fallback ? Color.pulseViolet : Color.pulseLime); Spacer(); Text("Score 92").font(.caption).foregroundStyle(.secondary) }
                 Text(job.verificationGrade == .fallback ? "The standard version did not pass every gate. This simplified version passed build, loading, interaction and safety checks." : "Build, browser loading, the primary interaction, accessibility and local resource checks passed.")
@@ -274,6 +287,7 @@ private struct PreviewSurface: View {
                     HStack { if isPublishing { ProgressView().tint(.black) }; Text(job.verificationGrade == .fallback ? "Confirm and publish safe version" : "Publish to Pulse").fontWeight(.bold) }
                         .frame(maxWidth: .infinity).padding(.vertical, 15)
                 }.buttonStyle(.borderedProminent).tint(.pulseLime).foregroundStyle(.black).disabled(isPublishing)
+                    .accessibilityIdentifier("generation.publish")
             }.padding(22).padding(.bottom, 110)
         }
     }

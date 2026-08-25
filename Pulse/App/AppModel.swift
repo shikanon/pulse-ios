@@ -64,6 +64,17 @@ final class AppModel {
     func refreshGeneration(_ id: UUID) async throws -> GenerationJob { try await api.generation(id: id) }
     func plan(for jobID: UUID) async throws -> GenerationPlan { try await api.plan(jobID: jobID) }
 
+    func artifactURL(for artifactID: UUID) -> URL {
+        api.artifactEntryURL(id: artifactID)
+    }
+
+    func artifactURL(for work: InteractiveApp) -> URL? {
+        guard let artifactID = work.artifactID else { return nil }
+        if let entry = work.artifactEntryURL,
+           let resolved = api.resolveArtifactEntryURL(entry, artifactID: artifactID) { return resolved }
+        return api.artifactEntryURL(id: artifactID)
+    }
+
     func publish(_ workID: UUID) async throws -> InteractiveApp {
         let work = try await api.publish(workID: workID)
         replace(work)

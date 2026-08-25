@@ -40,10 +40,18 @@ private struct FeedCard: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                LivingCanvas(app: app, touchPoint: touchPoint)
-                    .gesture(DragGesture(minimumDistance: 0).onChanged { value in
-                        touchPoint = CGPoint(x: value.location.x / proxy.size.width, y: value.location.y / proxy.size.height)
-                    })
+                if let artifactURL = model.artifactURL(for: app) {
+                    ArtifactPlayerView(url: artifactURL, accessibilityIdentifier: "published.artifact.player")
+                        .padding(.bottom, 88)
+                        .background(.black)
+                } else {
+                    LivingCanvas(app: app, touchPoint: touchPoint)
+                        .gesture(DragGesture(minimumDistance: 0).onChanged { value in
+                            touchPoint = CGPoint(x: value.location.x / proxy.size.width, y: value.location.y / proxy.size.height)
+                        })
+                        .accessibilityIdentifier("published.interactive.canvas")
+                        .accessibilityValue("touch-x-\(Int(touchPoint.x * 100))-y-\(Int(touchPoint.y * 100))")
+                }
                 LinearGradient(colors: [.black.opacity(0.72), .clear, .black.opacity(0.86)], startPoint: .top, endPoint: .bottom)
                     .allowsHitTesting(false)
 

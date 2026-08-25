@@ -1,0 +1,50 @@
+name: iOS XCTest
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "agent/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-xctest-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  xctest:
+    name: XCTest · iOS 26.5
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
+      PULSE_IOS_RUNTIME_VERSION: "26.5"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Xcode and Simulator Runtime
+        run: |
+          xcodebuild -version
+          xcrun simctl list runtimes
+          xcodebuild -version | grep -F "Xcode 26.5"
+          xcrun simctl list runtimes | grep -F "iOS 26.5"
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Run XCTest closed loop
+        run: scripts/run-xctest.sh
+
+      - name: Upload XCTest result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PulseTests-xcresult
+          path: .artifacts/xctest/*.xcresult
+          if-no-files-found: error
+          retention-days: 14
