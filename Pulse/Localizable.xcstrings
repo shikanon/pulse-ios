@@ -1,0 +1,66 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "error.action_unavailable" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This action is not available right now." } } }
+    },
+    "error.check_and_try_again" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Check the details and try again." } } }
+    },
+    "error.content_policy_rejected" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This can’t be submitted under Pulse community guidelines. Please revise it and try again." } } }
+    },
+    "error.content_safety_unavailable" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Pulse can’t check this right now. Your changes are still here—please try again shortly." } } }
+    },
+    "error.feature_unavailable" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This feature is temporarily unavailable." } } }
+    },
+    "error.generic" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Something went wrong. Please try again." } } }
+    },
+    "error.generation_quota_reached" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "You already have a creation in progress. Wait for it to finish or cancel it before starting another." } } }
+    },
+    "error.item_unavailable" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This item is no longer available." } } }
+    },
+    "error.permission_denied" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "You do not have permission to do that." } } }
+    },
+    "error.rate_limited" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Please wait a moment before trying again." } } }
+    },
+    "error.session_expired" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Your session has expired. Please sign in again." } } }
+    },
+    "error.terms_acceptance_required" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Review and accept the current Terms of Use to continue." } } }
+    },
+    "error.sign_in_required" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Sign in to continue." } } }
+    },
+    "error.upload_unavailable" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "The upload is unavailable right now. Please try again." } } }
+    },
+    "error.username_taken" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "That handle is unavailable. Try another one." } } }
+    },
+    "validation.invalid" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Check this entry and try again." } } }
+    },
+    "validation.out_of_range" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Use a supported value and try again." } } }
+    },
+    "validation.required" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Complete this field before continuing." } } }
+    },
+    "validation.too_long" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Shorten this entry and try again." } } }
+    },
+    "validation.unsupported" : {
+      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose a supported option and try again." } } }
+    }
+  },
+  "version" : "1.0"
+}

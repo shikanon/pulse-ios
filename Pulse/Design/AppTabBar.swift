@@ -2,22 +2,35 @@ import SwiftUI
 
 struct AppTabBar: View {
     @Binding var selectedTab: AppTab
+    let onReselect: (AppTab) -> Void
+    @ScaledMetric(relativeTo: .caption) private var tabHeight = 61.0
+
     var body: some View {
         HStack(spacing: 0) {
             ForEach(AppTab.allCases) { tab in
-                Button { selectedTab = tab } label: {
+                Button {
+                    if selectedTab == tab {
+                        onReselect(tab)
+                    } else {
+                        selectedTab = tab
+                    }
+                } label: {
                     VStack(spacing: 5) {
                         Image(systemName: tab.symbol)
                             .font(.system(size: tab == .create ? 24 : 22, weight: selectedTab == tab ? .bold : .medium))
-                            .frame(width: tab == .create ? 46 : 28, height: tab == .create ? 32 : 28)
+                            .frame(minWidth: 44, minHeight: 36)
                             .background(tab == .create ? Color.pulseLime : .clear, in: RoundedRectangle(cornerRadius: 9))
                             .foregroundStyle(tab == .create ? .black : (selectedTab == tab ? Color.pulseLime : .white))
-                        Text(tab.label).font(.caption2.weight(.medium))
+                        Text(tab.label).font(.caption2.weight(.medium)).multilineTextAlignment(.center)
                     }
                     .foregroundStyle(selectedTab == tab ? Color.pulseLime : .white)
-                    .frame(maxWidth: .infinity).frame(height: 61)
+                    .frame(maxWidth: .infinity, minHeight: tabHeight)
                 }
                 .accessibilityLabel(tab.accessibilityLabel)
+                .accessibilityValue(selectedTab == tab ? "Selected" : "")
+                .accessibilityHint(selectedTab == tab ? "Returns to the \(tab.label) tab root" : "Switches to the \(tab.label) tab")
+                .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
+                .accessibilityIdentifier("app.tab.\(tab.rawValue)")
             }
         }
         .padding(.horizontal, 8)

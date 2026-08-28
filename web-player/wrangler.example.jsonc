@@ -1,0 +1,14 @@
+{
+  "name": "pulse-web-player",
+  "main": "edge-worker.mjs",
+  "compatibility_date": "2026-08-27",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+  "vars": {
+    "PULSE_API_ORIGIN": "https://api.your-approved-domain.tld",
+    "PULSE_PUBLIC_PLAYER_ORIGIN": "https://play.your-approved-domain.tld"
+  }
+}

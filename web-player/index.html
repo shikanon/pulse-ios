@@ -3,85 +3,319 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="index,follow" />
+    <meta http-equiv="Content-Security-Policy" content="__PULSE_PUBLIC_PLAYER_CSP__" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23080808'/%3E%3Cpath d='M18 20h16c8 0 13 4 13 11s-5 12-13 12h-5v9H18V20zm11 9v6h5c2 0 3-1 3-3s-1-3-3-3h-5z' fill='%23b4ff14'/%3E%3C/svg%3E" />
     <title>Pulse — Interactive work</title>
     <style>
-      :root { color-scheme: dark; --lime:#b4ff14; --violet:#9357ff; --ink:#050505; }
-      * { box-sizing:border-box } body { margin:0; min-height:100vh; background:var(--ink); color:#fff; font-family:ui-rounded, -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif; overflow:hidden }
-      main { position:relative; display:grid; min-height:100svh; place-items:center; isolation:isolate; background:radial-gradient(circle at 50% 76%, #293d0a 0, transparent 20%), radial-gradient(circle at 50% 45%, #32136a 0, transparent 42%), #030305; }
-      canvas { position:absolute; inset:0; width:100%; height:100%; z-index:-1; touch-action:none; }
-      header { position:absolute; top:max(26px, env(safe-area-inset-top)); left:clamp(20px,5vw,56px); right:clamp(20px,5vw,56px); display:flex; justify-content:space-between; align-items:center; }
-      .brand { font-size:clamp(27px,4vw,38px); font-weight:800; letter-spacing:-.07em; } .status { display:flex; gap:12px; align-items:center; color:#d3d3d6; font-size:14px }
-      .dot { width:8px;height:8px;border-radius:50%; background:var(--lime); box-shadow:0 0 14px var(--lime) }
-      article { width:min(620px, calc(100vw - 44px)); align-self:end; margin-bottom:max(36px, env(safe-area-inset-bottom)); padding:24px; border:1px solid rgba(255,255,255,.16); border-radius:28px; background:rgba(10,10,11,.56); backdrop-filter:blur(18px); box-shadow:0 12px 60px rgba(0,0,0,.45) }
-      .eyebrow { margin:0 0 12px; color:var(--lime); font-size:14px; font-weight:650; } h1 { font-size:clamp(35px,6vw,58px); letter-spacing:-.065em; margin:0; line-height:.95 } .byline { color:#bbb; margin:11px 0 0; font-size:16px } .description { max-width:42ch; color:#ededed; line-height:1.5; margin:20px 0 24px }
-      .actions { display:flex; gap:12px; flex-wrap:wrap } button, a { appearance:none; border:0; color:#080808; font:inherit; font-weight:750; border-radius:999px; padding:12px 17px; background:var(--lime); cursor:pointer; text-decoration:none; } button.secondary { background:rgba(255,255,255,.1); color:#fff; border:1px solid rgba(255,255,255,.18) } button:focus-visible,a:focus-visible{outline:3px solid #fff;outline-offset:3px}
-      .tip { position:absolute; bottom:18px; right:24px; font-size:13px; color:#ffffff9c }
-      .load-state { position:absolute; top:84px; left:50%; translate:-50% 0; max-width:calc(100vw - 40px); padding:9px 14px; border:1px solid #ffffff24; border-radius:999px; background:#08080bcc; color:#ddd; font-size:13px; opacity:0; transition:opacity .2s }
-      .load-state.visible { opacity:1 }
-      dialog { width:min(540px,calc(100vw - 32px)); border:1px solid #ffffff28; border-radius:24px; padding:0; color:white; background:#101014; box-shadow:0 22px 70px #000b } dialog::backdrop{background:#000a;backdrop-filter:blur(5px)} .dialog-content{padding:22px}.dialog-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}.dialog-top h2{margin:0;font-size:23px;letter-spacing:-.04em}.icon-button{padding:7px 11px;background:#ffffff14;color:#fff}.review{padding:14px 0;border-top:1px solid #ffffff18}.review:first-of-type{border-top:0}.review-meta{display:flex;justify-content:space-between;font-size:14px;color:#c9c9cf}.rating{color:var(--lime);font-weight:750}.review p{margin:7px 0 0;line-height:1.45;color:#f5f5f7}.review-form{display:grid;gap:10px;margin-top:17px}.review-form textarea{min-height:74px;resize:vertical;border:1px solid #ffffff2b;border-radius:14px;background:#ffffff0c;color:white;font:inherit;padding:11px}.review-form footer{display:flex;justify-content:space-between;align-items:center}.review-form select{border:0;background:transparent;color:#fff;font:inherit}.review-form option{color:#000}
-      @media (max-width:620px) { article { padding:21px; border-radius:22px; margin-bottom:22px }.status span{display:none}.tip{display:none} }
+      :root { color-scheme: dark; --lime:#b4ff14; --ink:#050505; --line:rgba(255,255,255,.17); }
+      * { box-sizing:border-box }
+      body { margin:0; min-height:100vh; background:var(--ink); color:#fff; font-family:ui-rounded, -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif; -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
+      main { position:relative; min-height:100svh; overflow:hidden; background:#080909; }
+      iframe { position:absolute; inset:0; width:100%; height:100%; border:0; background:#080909; opacity:0; transition:opacity .2s; }
+      iframe.loaded { opacity:1; }
+      .skip-link { position:absolute; z-index:4; top:8px; left:8px; translate:0 -160%; padding:9px 12px; border-radius:8px; background:#fff; color:#080808; font-weight:750; text-decoration:none; transition:translate .15s; }
+      .skip-link:focus { translate:0 0; outline:3px solid var(--lime); outline-offset:2px; }
+      header { position:absolute; z-index:2; top:max(22px, env(safe-area-inset-top)); left:clamp(18px,4vw,52px); right:clamp(18px,4vw,52px); display:flex; justify-content:space-between; align-items:center; padding:8px 11px; border:1px solid var(--line); border-radius:14px; background:rgb(5 5 5 / .86); box-shadow:0 8px 28px rgb(0 0 0 / .26); pointer-events:none; }
+      .brand { font-size:clamp(27px,4vw,38px); font-weight:800; letter-spacing:-.07em; text-shadow:0 1px 12px #000; }
+      .status { display:flex; gap:9px; align-items:center; color:#f0f1ed; font-size:13px; text-shadow:0 1px 12px #000; }
+      .dot { width:8px; height:8px; border-radius:50%; background:var(--lime); box-shadow:0 0 12px var(--lime); } .status.is-unavailable .dot { background:#ff7665; box-shadow:0 0 12px #ff7665; }
+      article { position:absolute; z-index:2; left:50%; bottom:max(26px, env(safe-area-inset-bottom)); width:min(620px, calc(100vw - 36px)); max-height:min(58svh, 560px); translate:-50% 0; overflow-y:auto; overscroll-behavior:contain; padding:22px; border:1px solid var(--line); border-radius:22px; background:rgba(10,10,11,.86); box-shadow:0 12px 50px rgba(0,0,0,.5); }
+      .eyebrow { margin:0 0 10px; color:var(--lime); font-size:13px; font-weight:650; } h1 { margin:0; font-size:clamp(32px,6vw,54px); letter-spacing:-.065em; line-height:.96; } .byline { color:#d7d8d4; margin:10px 0 0; font-size:15px; } .review-status { display:inline-flex; gap:6px; align-items:center; margin:12px 0 0; color:#f0f1ed; font-size:13px; font-weight:700; } .review-status::before { content:"✓"; display:grid; place-items:center; width:17px; height:17px; border-radius:50%; background:var(--lime); color:#080808; font-size:11px; } .description { max-width:44ch; color:#f0f0ee; line-height:1.45; margin:16px 0 18px; }
+      .actions { display:flex; gap:10px; flex-wrap:wrap; } button, a { appearance:none; display:inline-flex; align-items:center; justify-content:center; min-height:42px; border:1px solid transparent; color:#080808; font:inherit; font-weight:740; border-radius:10px; padding:10px 14px; background:var(--lime); cursor:pointer; text-decoration:none; } button.secondary, a.secondary { background:#202220; color:#fff; border-color:var(--line); } button:disabled, a[aria-disabled="true"] { cursor:not-allowed; opacity:.55; } button:focus-visible, a:focus-visible { outline:3px solid #fff; outline-offset:3px; }
+      .load-state { position:absolute; z-index:3; top:50%; left:50%; width:min(420px,calc(100vw - 40px)); translate:-50% -50%; padding:20px; border:1px solid var(--line); border-radius:14px; background:#101112; color:#eee; text-align:center; line-height:1.45; }
+      .load-state[hidden], article[hidden], a[hidden], button[hidden] { display:none; }
+      .state-title { margin:0; font-size:clamp(22px,4vw,29px); font-weight:780; letter-spacing:-.045em; line-height:1.08; }
+      .state-detail { max-width:34ch; margin:10px auto 0; color:#d9dad6; }
+      .state-actions { display:flex; justify-content:center; margin-top:18px; }
+      .state-actions[hidden] { display:none; }
+      .load-state.is-failure { inset:0; width:auto; translate:0 0; display:grid; place-items:center; align-content:center; margin:0; padding:32px; border:0; border-radius:0; background:#080909; color:#d9dad6; text-align:center; line-height:1.5; }
+      .visually-hidden { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+      @media (max-width:620px) { article { max-height:min(62svh, 520px); padding:18px; border-radius:18px; }.status span { display:none; } }
+      @media (prefers-reduced-motion:reduce) { *, *::before, *::after { scroll-behavior:auto !important; transition-duration:0.01ms !important; animation-duration:0.01ms !important; animation-iteration-count:1 !important; } }
     </style>
   </head>
   <body>
-    <main>
-      <canvas id="garden" aria-label="Interactive Kinetic Garden; move or tap to make it react"></canvas>
-      <header><div class="brand">Pulse</div><div class="status"><i class="dot"></i><span>Interactive app</span></div></header>
-      <p id="load-state" class="load-state" role="status" aria-live="polite"></p>
-      <article>
-        <p id="eyebrow" class="eyebrow">Grow a chorus with every touch</p>
-        <h1 id="work-title">Kinetic Garden</h1>
-        <p id="byline" class="byline">by @echoform · 12.4K likes</p>
-        <p id="description" class="description">A living music garden. Move your cursor or tap to plant sounds and grow rhythms.</p>
-        <div class="actions"><button id="remix">Remix this app</button><button id="comments" class="secondary"><span id="comment-button-count">237</span> comments</button><button id="sound" class="secondary">Enable sound</button></div>
+    <a class="skip-link" href="#work-card">Skip to work details</a>
+    <main id="player" aria-busy="true">
+      <!-- A published work is always run from its immutable API artifact. The
+           sandbox intentionally does not receive the player's origin, forms,
+           popups, downloads, or top-level navigation privileges. -->
+      <iframe id="artifact" title="Published Pulse interactive work" sandbox="allow-scripts" referrerpolicy="no-referrer" allow="camera 'none'; microphone 'none'; geolocation 'none'; display-capture 'none'; fullscreen 'none'; payment 'none'; usb 'none'; clipboard-read 'none'; clipboard-write 'none'" hidden></iframe>
+      <header><div class="brand">Pulse</div><div id="publication-status" class="status"><i class="dot"></i><span id="status-copy">Published interactive work</span></div></header>
+      <section id="load-state" class="load-state" role="status" aria-live="polite" aria-atomic="true" tabindex="-1">
+        <h1 id="load-state-title" class="state-title">Loading published work…</h1>
+        <p id="load-state-detail" class="state-detail" hidden></p>
+        <div id="load-state-actions" class="state-actions" hidden>
+          <button id="retry-load" type="button">Try again</button>
+          <a id="failure-app-store" class="secondary" target="_blank" rel="noopener noreferrer" hidden>Get Pulse</a>
+          <a id="failure-privacy-policy" class="secondary" target="_blank" rel="noopener noreferrer" hidden>Privacy policy</a>
+        </div>
+      </section>
+      <article id="work-card" tabindex="-1" hidden>
+        <p id="eyebrow" class="eyebrow">Interactive work</p>
+        <h1 id="work-title">Pulse work</h1>
+        <p id="byline" class="byline"></p>
+        <p id="review-status" class="review-status" aria-label="Age rating: 4+. Reviewed for public sharing."><span id="age-rating">Age rating: 4+</span><span aria-hidden="true"> · </span><span id="review-copy">Reviewed for public sharing</span></p>
+        <p id="description" class="description"></p>
+        <div class="actions"><a id="remix" href="#">Remix in Pulse</a><button id="copy-link" class="secondary">Copy link</button><a id="report-content" class="secondary" hidden>Report in Pulse</a><a id="app-store" class="secondary" target="_blank" rel="noopener noreferrer" hidden>Get Pulse</a><a id="privacy-policy" class="secondary" target="_blank" rel="noopener noreferrer" hidden>Privacy policy</a></div>
+        <p id="action-status" class="visually-hidden" aria-live="polite" aria-atomic="true"></p>
       </article>
-      <div class="tip">Tap anywhere to plant a note</div>
     </main>
-    <dialog id="comment-dialog" aria-label="Comments and reviews">
-      <div class="dialog-content"><div class="dialog-top"><h2>Comments · <span id="comment-count">237</span></h2><button class="icon-button" id="close-comments" aria-label="Close comments">×</button></div>
-        <section id="review-list" aria-live="polite"><article class="review"><div class="review-meta"><strong>@mika</strong><span class="rating">★★★★★</span></div><p>The sound response feels wonderfully alive. I keep finding new rhythms.</p></article><article class="review"><div class="review-meta"><strong>@kai.studio</strong><span class="rating">★★★★☆</span></div><p>A beautiful interaction — I would love a slower mode for winding down.</p></article></section>
-        <form id="review-form" class="review-form"><textarea id="review-body" maxlength="500" required placeholder="Write a comment or a thoughtful review…" aria-label="Your comment"></textarea><footer><label>Score <select id="review-score" aria-label="Score"><option value="5">★★★★★</option><option value="4">★★★★☆</option><option value="3">★★★☆☆</option><option value="2">★★☆☆☆</option><option value="1">★☆☆☆☆</option></select></label><button>Post comment</button></footer></form>
-      </div>
-    </dialog>
-    <script>
-      const API_ORIGIN = new URLSearchParams(location.search).get('api') || 'http://localhost:8787';
+    <script type="module">
+      import { resolvePublicAPIOrigin } from './config.mjs';
+
+      const query = new URLSearchParams(location.search);
+      const API_ORIGIN = resolvePublicAPIOrigin(import.meta.env.VITE_PULSE_API_ORIGIN, import.meta.env.DEV) || '';
       const pathParts = location.pathname.split('/').filter(Boolean);
-      const slug = new URLSearchParams(location.search).get('slug') || (pathParts[0] === 'a' ? pathParts[1] : '');
-      let currentWork = null;
-      const canvas = document.querySelector('#garden'), ctx = canvas.getContext('2d');
-      let point = { x: innerWidth*.5, y: innerHeight*.62, pulse:0 }, notes=[], sound;
-      function resize(){ const dpr=devicePixelRatio||1; canvas.width=innerWidth*dpr;canvas.height=innerHeight*dpr;ctx.setTransform(dpr,0,0,dpr,0,0) } resize(); addEventListener('resize',resize);
-      function seed(x,y){ notes.push({x,y,r:8,life:1,hue:78+Math.random()*40}); point={x,y,pulse:1}; if(sound) tone(220+Math.random()*420) }
-      addEventListener('pointermove', e => { point.x=e.clientX; point.y=e.clientY }); canvas.addEventListener('pointerdown', e => seed(e.clientX,e.clientY));
-      function tone(hz){ const o=sound.createOscillator(), g=sound.createGain();o.frequency.value=hz;g.gain.setValueAtTime(.08,sound.currentTime);g.gain.exponentialRampToValueAtTime(.001,sound.currentTime+.35);o.connect(g).connect(sound.destination);o.start();o.stop(sound.currentTime+.36) }
-      document.querySelector('#sound').onclick=async()=>{ sound ??=new AudioContext();await sound.resume();document.querySelector('#sound').textContent='Sound on' };
-      document.querySelector('#remix').onclick=()=>{ const target=currentWork ? `pulse://remix/${encodeURIComponent(currentWork.id)}` : 'pulse://create'; location.href=target; setTimeout(()=>alert('Open Pulse on iPhone to make your remix.'),350) };
-      const dialog=document.querySelector('#comment-dialog'),count=document.querySelector('#comment-count'),list=document.querySelector('#review-list');
-      document.querySelector('#comments').onclick=()=>dialog.showModal();document.querySelector('#close-comments').onclick=()=>dialog.close();
-      document.querySelector('#review-form').onsubmit=(event)=>{event.preventDefault();const body=document.querySelector('#review-body'),score=document.querySelector('#review-score');const stars='★★★★★'.slice(0,Number(score.value))+'☆☆☆☆☆'.slice(Number(score.value));const review=document.createElement('article');review.className='review';review.innerHTML=`<div class="review-meta"><strong>@you</strong><span class="rating">${stars}</span></div><p></p>`;review.querySelector('p').textContent=body.value;list.prepend(review);count.textContent=String(Number(count.textContent)+1);document.querySelector('#comments').textContent=`${count.textContent} comments`;body.value=''};
-      function paint(t){ ctx.clearRect(0,0,innerWidth,innerHeight); const g=ctx.createRadialGradient(point.x,point.y,0,point.x,point.y,280);g.addColorStop(0,'rgba(190,255,25,.24)');g.addColorStop(1,'rgba(190,255,25,0)');ctx.fillStyle=g;ctx.fillRect(0,0,innerWidth,innerHeight);
-        for(let i=0;i<14;i++){ const y=innerHeight*(.2+i*.045)+Math.sin(t*.001+i)*22;ctx.beginPath();ctx.moveTo(-20,y);ctx.bezierCurveTo(innerWidth*.3,y-65,innerWidth*.7,y+65,innerWidth+20,y+Math.sin(t*.0013+i)*48);ctx.strokeStyle='rgba(134,65,255,.24)';ctx.lineWidth=1;ctx.stroke() }
-        notes.forEach((n,i)=>{ n.life-=.004; n.r+=.42;ctx.beginPath();ctx.arc(n.x,n.y,n.r,0,Math.PI*2);ctx.strokeStyle=`hsla(${n.hue},100%,65%,${Math.max(n.life,0)})`;ctx.lineWidth=2;ctx.stroke(); if(n.life<=0)notes.splice(i,1) });
-        point.pulse*=.94;for(let r=110;r>12;r-=24){ctx.beginPath();ctx.arc(point.x,point.y,r+Math.sin(t*.006)*4,0,Math.PI*2);ctx.strokeStyle=`rgba(180,255,20,${.04+r/750+point.pulse*.35})`;ctx.stroke()} requestAnimationFrame(paint) }
-      requestAnimationFrame(paint);
-      const compact = value => value >= 1000 ? `${(value/1000).toFixed(value >= 10000 ? 0 : 1)}K` : String(value);
-      async function hydrate(){
-        if(!slug) return;
-        const state=document.querySelector('#load-state');state.textContent='Loading published work…';state.classList.add('visible');
+      const slug = query.get('slug') || (pathParts[0] === 'a' ? pathParts[1] : '');
+      const artifact = document.querySelector('#artifact');
+      const state = document.querySelector('#load-state');
+      const stateTitle = document.querySelector('#load-state-title');
+      const stateDetail = document.querySelector('#load-state-detail');
+      const stateActions = document.querySelector('#load-state-actions');
+      const retryLoad = document.querySelector('#retry-load');
+      const privacyPolicy = document.querySelector('#privacy-policy');
+      const failurePrivacyPolicy = document.querySelector('#failure-privacy-policy');
+      const appStore = document.querySelector('#app-store');
+      const failureAppStore = document.querySelector('#failure-app-store');
+      const card = document.querySelector('#work-card');
+      const player = document.querySelector('#player');
+      const publicationStatus = document.querySelector('#publication-status');
+      const statusCopy = document.querySelector('#status-copy');
+      const actionStatus = document.querySelector('#action-status');
+      const copyLink = document.querySelector('#copy-link');
+      const reportContent = document.querySelector('#report-content');
+      const reviewStatus = document.querySelector('#review-status');
+      const ageRating = document.querySelector('#age-rating');
+      const reviewCopy = document.querySelector('#review-copy');
+      const compact = value => value >= 1000 ? `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}K` : String(value || 0);
+      let artifactLoadTimeout;
+      let hydrationAttempt = 0;
+      let hydrationAbortController;
+      let currentFailure;
+
+      const failureStates = {
+        incompleteLink: {
+          title: 'This link is incomplete',
+          detail: 'Ask the sender to share the full Pulse link.',
+          status: 'Unavailable link'
+        },
+        unavailable: {
+          title: 'This work is no longer available',
+          detail: 'It may have been removed or is no longer shared publicly.',
+          status: 'Unavailable link'
+        },
+        incompatible: {
+          title: 'This work cannot open here',
+          detail: 'Try the latest version of your browser or open the link on another device.',
+          status: 'Unavailable in this browser'
+        },
+        temporary: {
+          title: 'Pulse needs a moment',
+          detail: 'The work could not be loaded right now. Nothing was changed. Please try again.',
+          status: 'Temporarily unavailable',
+          canRetry: true
+        },
+        configuration: {
+          title: 'Pulse Player is not ready yet',
+          detail: 'Please return in a little while.',
+          status: 'Temporarily unavailable'
+        }
+      };
+
+      function configuredAPIURL() {
+        if (!API_ORIGIN) return null;
         try {
-          const response=await fetch(`${API_ORIGIN}/v1/public/works/${encodeURIComponent(slug)}`);
-          if(!response.ok) throw new Error(response.status === 404 ? 'This work is not published.' : 'Unable to load this work.');
-          const payload=await response.json();currentWork=payload.work;
-          document.title=`Pulse — ${currentWork.title}`;
-          document.querySelector('#work-title').textContent=currentWork.title;
-          document.querySelector('#eyebrow').textContent=currentWork.interaction || 'Touch the canvas and make it yours';
-          document.querySelector('#description').textContent=currentWork.prompt;
-          document.querySelector('#byline').textContent=`by @${currentWork.creator} · ${compact(currentWork.likes)} likes`;
-          count.textContent=String(currentWork.comments);document.querySelector('#comment-button-count').textContent=String(currentWork.comments);
-          document.querySelector('#remix').disabled=!currentWork.allowRemix;
-          if(!currentWork.allowRemix) document.querySelector('#remix').textContent='Remix disabled';
-          state.classList.remove('visible');
-        } catch(error) { state.textContent=error.message;state.classList.add('visible'); }
+          const value = new URL(API_ORIGIN);
+          if (value.pathname !== '/' || value.search || value.hash || value.username || value.password) return null;
+          if (!import.meta.env.DEV && value.protocol !== 'https:') return null;
+          return value;
+        } catch { return null; }
       }
+
+      const apiURL = configuredAPIURL();
+
+      function safeExternalHTTPSURL(rawValue) {
+        try {
+          const value = new URL(rawValue);
+          if (value.protocol !== 'https:' || !value.hostname || value.username || value.password) return null;
+          return value;
+        } catch { return null; }
+      }
+
+      function updateFailureActions(canRetry = false) {
+        retryLoad.hidden = !canRetry;
+        stateActions.hidden = !canRetry && failureAppStore.hidden && failurePrivacyPolicy.hidden;
+      }
+
+      function applyPrivacyPolicy(rawValue) {
+        const policyURL = safeExternalHTTPSURL(rawValue);
+        if (!policyURL) return;
+        for (const link of [privacyPolicy, failurePrivacyPolicy]) {
+          link.href = policyURL.toString();
+          link.hidden = false;
+        }
+        if (currentFailure) updateFailureActions(currentFailure.canRetry);
+      }
+
+      function applyAppStoreLink(rawValue) {
+        const appStoreURL = safeExternalHTTPSURL(rawValue);
+        const host = appStoreURL?.hostname.toLowerCase();
+        if (!appStoreURL || (host !== 'apps.apple.com' && host !== 'itunes.apple.com')) return;
+        for (const link of [appStore, failureAppStore]) {
+          link.href = appStoreURL.toString();
+          link.hidden = false;
+        }
+        if (currentFailure) updateFailureActions(currentFailure.canRetry);
+      }
+
+      async function loadPublicPolicyLinks() {
+        if (!apiURL) return;
+        try {
+          const response = await fetch(new URL('/v1/client-configuration', apiURL), { credentials: 'omit' });
+          if (!response.ok) return;
+          const payload = await response.json();
+          applyPrivacyPolicy(payload.configuration?.privacyPolicyURL);
+          applyAppStoreLink(payload.configuration?.appStoreURL);
+        } catch { /* A missing policy link must not block the public work. */ }
+      }
+
+      function resetLoading(title = 'Loading published work…', detail = '') {
+        clearTimeout(artifactLoadTimeout);
+        stateTitle.textContent = title;
+        stateDetail.textContent = detail;
+        stateDetail.hidden = !detail;
+        currentFailure = undefined;
+        updateFailureActions();
+        state.hidden = false;
+        state.classList.remove('is-failure');
+        state.setAttribute('role', 'status');
+        artifact.hidden = true;
+        artifact.classList.remove('loaded');
+        artifact.removeAttribute('src');
+        card.hidden = true;
+        player.setAttribute('aria-busy', 'true');
+        statusCopy.textContent = 'Loading published work';
+        publicationStatus.classList.remove('is-unavailable');
+      }
+
+      function showFailure(kind) {
+        const failure = failureStates[kind] || failureStates.temporary;
+        currentFailure = failure;
+        clearTimeout(artifactLoadTimeout);
+        stateTitle.textContent = failure.title;
+        stateDetail.textContent = failure.detail;
+        stateDetail.hidden = false;
+        updateFailureActions(failure.canRetry);
+        state.hidden = false;
+        state.classList.add('is-failure');
+        state.setAttribute('role', 'alert');
+        artifact.hidden = true;
+        artifact.classList.remove('loaded');
+        card.hidden = true;
+        player.setAttribute('aria-busy', 'false');
+        statusCopy.textContent = failure.status;
+        publicationStatus.classList.add('is-unavailable');
+        window.requestAnimationFrame(() => state.focus({ preventScroll: true }));
+      }
+
+      function publicWorkFailureKind(response) {
+        if (response.status === 404 || response.status === 410 || response.status === 401 || response.status === 403) return 'unavailable';
+        if (response.status === 400 || response.status === 422) return 'incompatible';
+        return 'temporary';
+      }
+
+      function finishArtifactLoad() {
+        clearTimeout(artifactLoadTimeout);
+        artifact.classList.add('loaded');
+        state.hidden = true;
+        player.setAttribute('aria-busy', 'false');
+      }
+
+      async function hydrate() {
+        const attempt = ++hydrationAttempt;
+        hydrationAbortController?.abort();
+        hydrationAbortController = new AbortController();
+        resetLoading();
+        if (!slug) return showFailure('incompleteLink');
+        if (!apiURL) return showFailure('configuration');
+        try {
+          const response = await fetch(new URL(`/v1/public/works/${encodeURIComponent(slug)}`, apiURL), {
+            credentials: 'omit',
+            signal: hydrationAbortController.signal
+          });
+          if (attempt !== hydrationAttempt) return;
+          if (!response.ok) return showFailure(publicWorkFailureKind(response));
+          const payload = await response.json();
+          if (attempt !== hydrationAttempt) return;
+          const work = payload.work;
+          if (!work.artifactId || !work.artifactEntryUrl || work.contentReviewStatus !== 'approved' || work.ageRating !== '4+') {
+            return showFailure('unavailable');
+          }
+
+          document.title = `Pulse — ${work.title}`;
+          document.querySelector('#work-title').textContent = work.title;
+          document.querySelector('#eyebrow').textContent = work.interaction || 'Interactive work';
+          document.querySelector('#description').textContent = work.prompt || 'Open in Pulse to explore this work.';
+          document.querySelector('#byline').textContent = `by @${work.creator} · ${compact(work.likes)} likes · ${work.verificationGrade}`;
+          ageRating.textContent = `Age rating: ${work.ageRating}`;
+          reviewCopy.textContent = 'Reviewed for public sharing';
+          reviewStatus.setAttribute('aria-label', `Age rating: ${work.ageRating}. Reviewed for public sharing.`);
+          statusCopy.textContent = `${work.verificationGrade} published work`;
+          publicationStatus.classList.remove('is-unavailable');
+          const remix = document.querySelector('#remix');
+          remix.href = `pulse://remix/${encodeURIComponent(work.id)}`;
+          remix.setAttribute('aria-label', `Remix ${work.title} in Pulse`);
+          copyLink.setAttribute('aria-label', `Copy a link to ${work.title}`);
+          reportContent.href = `pulse://report/${encodeURIComponent(slug)}`;
+          reportContent.setAttribute('aria-label', `Report ${work.title} in Pulse`);
+          reportContent.hidden = false;
+          if (!work.allowRemix) {
+            remix.textContent = 'Remix unavailable';
+            remix.removeAttribute('href');
+            remix.setAttribute('aria-disabled', 'true');
+            remix.tabIndex = -1;
+          } else {
+            remix.textContent = 'Remix in Pulse';
+            remix.removeAttribute('aria-disabled');
+            remix.tabIndex = 0;
+          }
+
+          const entry = new URL(work.artifactEntryUrl, apiURL);
+          if (entry.origin !== apiURL.origin || !entry.pathname.startsWith('/v1/artifacts/')) {
+            return showFailure('unavailable');
+          }
+          artifact.title = `Interactive work: ${work.title}`;
+          artifact.onload = () => {
+            if (attempt === hydrationAttempt) finishArtifactLoad();
+          };
+          artifact.onerror = () => {
+            if (attempt === hydrationAttempt) showFailure('temporary');
+          };
+          artifactLoadTimeout = window.setTimeout(() => {
+            if (attempt === hydrationAttempt) showFailure('temporary');
+          }, 12000);
+          artifact.hidden = false;
+          artifact.src = entry.toString();
+          card.hidden = false;
+        } catch (error) {
+          if (attempt === hydrationAttempt && error.name !== 'AbortError') showFailure('temporary');
+        }
+      }
+
+      copyLink.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(new URL(`/a/${encodeURIComponent(slug)}`, location.origin).toString());
+          copyLink.textContent = 'Link copied';
+          actionStatus.textContent = 'Link copied to clipboard.';
+        } catch {
+          copyLink.textContent = 'Copy unavailable';
+          actionStatus.textContent = 'Copy is unavailable in this browser.';
+        }
+      });
+      retryLoad.addEventListener('click', hydrate);
+      loadPublicPolicyLinks();
       hydrate();
     </script>
   </body>

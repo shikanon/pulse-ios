@@ -1,0 +1,51 @@
+name: Public Web Player quality
+
+on:
+  pull_request:
+    paths:
+      - 'web-player/**'
+      - '.github/workflows/web-player-quality.yml'
+  push:
+    branches:
+      - main
+      - 'agent/**'
+    paths:
+      - 'web-player/**'
+      - '.github/workflows/web-player-quality.yml'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: web-player
+
+jobs:
+  web-player:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web-player/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Run public player contract and security tests
+        run: npm test
+      - name: Build default public player
+        run: npm run build
+      - name: Build release player and its associated-domains asset
+        env:
+          PULSE_APPLE_TEAM_ID: ABCDE12345
+          PULSE_IOS_BUNDLE_ID: com.shikanon.pulse
+          PULSE_UNIVERSAL_LINK_HOST: play.pulse.test
+          VITE_PULSE_API_ORIGIN: https://api.pulse.test
+        run: |
+          npm run build:release
+          test -f dist/.well-known/apple-app-site-association
+          node --input-type=module -e 'const association = JSON.parse(await (await import("node:fs/promises")).readFile("dist/.well-known/apple-app-site-association", "utf8")); const details = association.applinks?.details; if (!Array.isArray(details) || details.length !== 1 || !Array.isArray(details[0].appIDs) || details[0].appIDs.length !== 1 || details[0].appIDs[0] !== "ABCDE12345.com.shikanon.pulse") process.exit(1)'
+      - name: Audit production dependencies
+        run: npm audit --audit-level=high

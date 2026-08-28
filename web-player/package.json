@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 8080",
     "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0 --port 8080"
+    "build:release": "PULSE_RELEASE_BUILD=1 vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 8080",
+    "test": "node --test associated-domains.test.mjs config.test.mjs public-work.test.mjs security-policy.test.mjs open-graph.test.mjs edge-worker.test.mjs"
   },
   "devDependencies": {
     "vite": "6.4.3"

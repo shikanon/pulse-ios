@@ -59,6 +59,26 @@ struct GenerationAsset: Identifiable, Decodable, Equatable, Sendable {
     }
 }
 
+extension GenerationAsset: Encodable {
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(id, forKey: .id)
+        try values.encode(owner, forKey: .owner)
+        try values.encode(library, forKey: .library)
+        try values.encode(source, forKey: .source)
+        try values.encode(kind, forKey: .kind)
+        try values.encode(displayName, forKey: .displayName)
+        try values.encode(fileName, forKey: .fileName)
+        try values.encode(mediaType, forKey: .mediaType)
+        try values.encode(sizeBytes, forKey: .sizeBytes)
+        try values.encode(status, forKey: .status)
+        try values.encodeIfPresent(summary, forKey: .summary)
+        try values.encodeIfPresent(license, forKey: .license)
+        try values.encodeIfPresent(deliveryURL, forKey: .deliveryURL)
+        try values.encodeIfPresent(confidence, forKey: .confidence)
+    }
+}
+
 struct GenerationJob: Identifiable, Codable, Equatable, Sendable {
     enum Stage: String, Codable, CaseIterable, Sendable {
         case queued, processingAssets = "processing_assets", planning, coding, verifying, repairing
@@ -112,6 +132,97 @@ struct GenerationJob: Identifiable, Codable, Equatable, Sendable {
     }
 }
 
+// WorkVersion is the creator-facing, read-only summary of a generation
+// candidate. Unlike GenerationJob it intentionally has no prompt, asset list,
+// error category, or operational status message, so the profile timeline can
+// remain useful without becoming a route to private inputs or server details.
+struct WorkVersion: Identifiable, Decodable, Equatable, Sendable {
+    let version: Int
+    let generationID: UUID
+    let artifactID: UUID?
+    let verificationID: UUID?
+    let verificationGrade: InteractiveApp.VerificationGrade
+    let stage: GenerationJob.Stage
+    let isCurrent: Bool
+    let isPublished: Bool
+    let createdAt: Date
+
+    var id: UUID { generationID }
+
+    enum CodingKeys: String, CodingKey {
+        case version, verificationGrade, stage, isCurrent, isPublished, createdAt
+        case generationID = "generationId"
+        case artifactID = "artifactId"
+        case verificationID = "verificationId"
+    }
+}
+
+// GenerationFailurePresentation is the only user-facing interpretation of the
+// backend's operational failure category. The category remains useful for
+// server observability, but it can reveal implementation details and is not a
+// stable piece of product copy.
+enum GenerationFailurePresentation: Equatable, Sendable {
+    case cancelled
+    case needsChanges
+    case temporarilyUnavailable
+    case unavailable
+
+    init(stage: GenerationJob.Stage, errorCategory: String?) {
+        guard stage != .cancelled else {
+            self = .cancelled
+            return
+        }
+
+        switch errorCategory {
+        case "artifact_safety_check_failed", "artifact_manifest_invalid", "verification_hard_gate_failed", "verifier_report_rejected", "fallback_verification_failed", "fallback_quality_below_threshold":
+            self = .needsChanges
+        case "coding_agent_failed", "local_artifact_export_failed", "artifact_persist_failed", "verifier_unavailable", "fallback_transition_failed", "fallback_build_failed", "fallback_verifier_unavailable", "fallback_artifact_persist_failed":
+            self = .temporarilyUnavailable
+        default:
+            self = .unavailable
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .cancelled:
+            "Generation cancelled"
+        case .needsChanges:
+            "This version needs changes"
+        case .temporarilyUnavailable:
+            "Pulse needs a moment"
+        case .unavailable:
+            "This version was not created"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .cancelled:
+            "Nothing was published. Your original instruction is still here, so you can adjust it and start again when ready."
+        case .needsChanges:
+            "This version did not pass Pulse’s required safety or quality checks. Nothing was published. Update the idea or materials, then create a new version."
+        case .temporarilyUnavailable:
+            "Pulse could not finish this generation right now. Nothing was published. Your idea and materials are still private, and you can try again."
+        case .unavailable:
+            "Pulse could not create this version. Nothing was published. Your idea and materials are still private. You can edit the idea or try again."
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .cancelled:
+            "xmark.circle.fill"
+        case .needsChanges:
+            "shield.lefthalf.filled"
+        case .temporarilyUnavailable:
+            "clock.arrow.circlepath"
+        case .unavailable:
+            "exclamationmark.triangle.fill"
+        }
+    }
+}
+
 struct GenerationPlan: Identifiable, Codable, Equatable, Sendable {
     struct Screen: Codable, Equatable, Identifiable, Sendable { let id: String; let purpose: String }
     struct Interaction: Codable, Equatable, Identifiable, Sendable { let id: String; let trigger: String; let effect: String }
@@ -139,5 +250,38 @@ struct GenerationPlan: Identifiable, Codable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case id, schemaVersion, title, objective, screens, interactions, assetMappings, acceptanceCases, constraints, scaffoldVersion
         case jobID = "jobId"
+    }
+}
+
+struct VerificationReport: Identifiable, Codable, Equatable, Sendable {
+    struct Check: Codable, Equatable, Identifiable, Sendable {
+        let name: String
+        let status: String
+        let hardGate: Bool
+        let durationMS: Int
+        let summary: String
+        var id: String { name }
+
+        enum CodingKeys: String, CodingKey {
+            case name, status, hardGate, summary
+            case durationMS = "durationMs"
+        }
+    }
+
+    let id: UUID
+    let jobID: UUID
+    let runID: UUID
+    let grade: InteractiveApp.VerificationGrade
+    let score: Double
+    let checks: [Check]
+    let verifierVersion: String
+    let artifactHash: String
+    let summary: String
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, grade, score, checks, verifierVersion, artifactHash, summary, createdAt
+        case jobID = "jobId"
+        case runID = "runId"
     }
 }
