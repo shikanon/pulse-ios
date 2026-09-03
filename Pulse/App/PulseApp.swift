@@ -8,6 +8,7 @@ struct PulseApp: App {
     @State private var sessionModel = SessionModel()
     @State private var telemetry = PulseTelemetry()
     @State private var runtimeLifecycle = PulseRuntimeLifecycle()
+    @AppStorage(PulseAppLanguage.storageKey) private var appLanguage = PulseAppLanguage.defaultLanguage.rawValue
 
     var body: some Scene {
         WindowGroup {
@@ -16,6 +17,7 @@ struct PulseApp: App {
                 .environment(sessionModel)
                 .environment(telemetry)
                 .environment(runtimeLifecycle)
+                .environment(\.locale, PulseAppLanguage(rawValue: appLanguage)?.locale ?? PulseAppLanguage.defaultLanguage.locale)
                 .preferredColorScheme(.dark)
         }
     }
@@ -60,6 +62,8 @@ private struct RootView: View {
                 LaunchGateView(state: launchState, retry: { Task { await bootstrap() } })
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black)
         .task {
             queueUITestDeepLinkIfNeeded()
             telemetry.start()
@@ -107,26 +111,38 @@ private struct RootView: View {
 
     @ViewBuilder
     private var mainContent: some View {
-        ZStack(alignment: .bottom) {
-            HomeTabRoot(
-                isSelected: selectedTab == .home,
-                resetToken: homeTabResetToken,
-                reconnect: { Task { await bootstrap() } }
-            )
-            .tabVisibility(selectedTab == .home)
+        GeometryReader { viewport in
+            ZStack(alignment: .bottom) {
+                HomeTabRoot(
+                    isSelected: selectedTab == .home,
+                    resetToken: homeTabResetToken,
+                    reconnect: { Task { await bootstrap() } }
+                )
+                .tabVisibility(selectedTab == .home)
 
-            createTabContent
-                .padding(.bottom, 88)
-                .tabVisibility(selectedTab == .create)
+                createTabContent(viewportHeight: viewport.size.height)
+                    .padding(.bottom, 88)
+                    .tabVisibility(selectedTab == .create)
 
-            profileTabContent
-                .padding(.bottom, 88)
-                .tabVisibility(selectedTab == .profile)
+                profileTabContent
+                    .padding(.bottom, 88)
+                    .tabVisibility(selectedTab == .profile)
 
-            AppTabBar(selectedTab: $selectedTab, onReselect: resetTabToRoot)
-                .padding(.horizontal, 18)
-                .padding(.bottom, 8)
+                // Keep the system gesture area visually stable while the
+                // paged Feed moves behind the floating navigation control.
+                Color.black
+                    .frame(height: 36)
+                    .frame(maxWidth: .infinity)
+                    .ignoresSafeArea(edges: .bottom)
+                    .allowsHitTesting(false)
+
+                AppTabBar(selectedTab: $selectedTab, onReselect: resetTabToRoot)
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 8)
+            }
+            .frame(width: viewport.size.width, height: viewport.size.height, alignment: .bottom)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea(edges: .bottom)
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
@@ -156,7 +172,7 @@ private struct RootView: View {
     }
 
     @ViewBuilder
-    private var createTabContent: some View {
+    private func createTabContent(viewportHeight: CGFloat) -> some View {
         if appModel.isOfflineReadOnly {
             OfflineReadOnlySurface(
                 title: "Creation needs a connection",
@@ -165,7 +181,11 @@ private struct RootView: View {
             )
         } else {
             VStack(spacing: 0) {
-                CreateView(parent: appModel.pendingRemixSource, recoveryWork: appModel.pendingGenerationRecovery) {
+                CreateView(
+                    parent: appModel.pendingRemixSource,
+                    recoveryWork: appModel.pendingGenerationRecovery,
+                    interactionViewportHeight: viewportHeight
+                ) {
                     appModel.clearPendingRemix()
                     appModel.clearPendingGenerationRecovery()
                     selectedTab = .home
@@ -640,8 +660,16 @@ struct AuthenticationRequiredView: View {
 enum AppTab: String, CaseIterable, Identifiable, Hashable {
     case home, create, profile
     var id: String { rawValue }
-    var label: String { rawValue.capitalized }
-    var accessibilityLabel: String { self == .create ? "Create an original app from one sentence" : label }
+    var label: LocalizedStringKey {
+        switch self {
+        case .home: "Home"
+        case .create: "Create"
+        case .profile: "Profile"
+        }
+    }
+    var accessibilityLabel: LocalizedStringKey {
+        self == .create ? "Create an original app from one sentence" : label
+    }
     var symbol: String {
         switch self {
         case .home: "house.fill"

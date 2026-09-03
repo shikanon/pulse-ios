@@ -181,6 +181,11 @@ private struct ArtifactWebView: UIViewRepresentable {
         webView.backgroundColor = .black
         webView.scrollView.backgroundColor = .black
         webView.scrollView.contentInsetAdjustmentBehavior = .never
+        // Generated apps own taps and controls, but the enclosing Pulse Feed
+        // owns vertical paging. A nested WKWebView scroll recognizer otherwise
+        // swallows the swipe before SwiftUI can move to the next card.
+        webView.scrollView.isScrollEnabled = false
+        webView.scrollView.bounces = false
         webView.scrollView.keyboardDismissMode = .onDrag
         webView.allowsBackForwardNavigationGestures = false
         webView.allowsLinkPreview = false

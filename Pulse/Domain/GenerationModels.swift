@@ -1,5 +1,17 @@
 import Foundation
 
+struct GenerationCapabilities: Decodable, Equatable, Sendable {
+    enum Mode: String, Decodable, Sendable {
+        case live
+        case deterministicLocal = "deterministic-local"
+    }
+
+    let mode: Mode
+    let modelBacked: Bool
+
+    var usesLiveModel: Bool { mode == .live && modelBacked }
+}
+
 struct GenerationAsset: Identifiable, Decodable, Equatable, Sendable {
     enum Status: String, Codable, Sendable { case uploading, ready }
     enum Library: String, Codable, Sendable { case `public`, `private` }

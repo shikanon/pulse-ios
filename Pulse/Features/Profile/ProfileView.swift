@@ -101,7 +101,7 @@ struct ProfileView: View {
                             .foregroundStyle(Color.pulseCoral)
                             .accessibilityLabel("Your work list may be out of date. Pull to refresh or try again.")
                     }
-                }.padding(22).padding(.bottom, 110)
+                }.padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 28)
                 }
                 .background(.black).foregroundStyle(.white).navigationTitle("Profile")
                 .toolbar {
@@ -111,6 +111,7 @@ struct ProfileView: View {
                                 Image(systemName: "gearshape")
                             }
                             .accessibilityLabel("Profile and safety settings")
+                            .accessibilityIdentifier("profile.settings")
                         }
                     }
                 }
@@ -259,11 +260,11 @@ private enum ProfileWorkFilter: String, CaseIterable, Identifiable {
     var emptyDescription: String {
         switch self {
         case .all: "Use Create to generate your first interactive app."
-        case .published: "Publish an approved work when you are ready to share it."
+        case .published: "Publish a verified work when you are ready to share it."
         case .remixes: "Remixed works will appear here after you create them."
-        case .drafts: "Saved drafts and ready-to-review candidates appear here."
-        case .creating: "Generating works stay here until they are ready to review."
-        case .attention: "Works that need review, changes, or a response will appear here."
+        case .drafts: "Saved drafts and verified candidates ready to publish appear here."
+        case .creating: "Generating works stay here until their technical checks finish."
+        case .attention: "Works that were taken down or need changes will appear here."
         case .revoked: "Links you intentionally withdrew will be kept here until the work is published again."
         }
     }
@@ -611,11 +612,11 @@ private struct WorkDetailsSheet: View {
         guard let review = work.contentReviewStatus else { return nil }
         switch review {
         case .pending:
-            return work.contentReviewRequestedAt == nil ? "Not submitted for content review" : "In content review"
+            return work.status == .published ? "Live · eligible for post-publication review" : "Not yet reviewed"
         case .approved:
-            return "Content review approved"
+            return "Post-publication review approved"
         case .rejected:
-            return "Content review needs changes"
+            return "Taken down after review"
         }
     }
 
@@ -623,7 +624,7 @@ private struct WorkDetailsSheet: View {
         switch work.status {
         case .processing: return "Resume generation"
         case .draft where work.generationJobID != nil:
-            return work.artifactID == nil ? "Continue generation" : "Continue review"
+            return work.artifactID == nil ? "Continue generation" : "Open ready version"
         default: return nil
         }
     }
@@ -683,10 +684,10 @@ private struct WorkDetailsSheet: View {
 
                     if work.contentReviewStatus == .rejected {
                         VStack(alignment: .leading, spacing: 8) {
-                            Label("This version remains private", systemImage: "lock.shield")
+                            Label("This version was taken down", systemImage: "lock.shield")
                                 .font(.headline)
                                 .foregroundStyle(Color.pulseCoral)
-                            Text("You can create a new version with changes. Pulse does not show reviewer identities or internal safety rules here.")
+                            Text("You can create a new version with changes. Pulse does not show moderator identities or internal safety rules here.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                             if let supportURL = model.clientConfiguration?.resolvedSupportURL {
@@ -824,7 +825,7 @@ private struct WorkDetailsSheet: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Text("Version history is read-only. Eligible historical candidates can be previewed privately, but cannot be switched or republished outside the current review flow.")
+                    Text("Version history is read-only. Eligible historical candidates can be previewed privately, but only the current verified candidate can be published.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -1053,7 +1054,7 @@ private struct WorkVersionsSheet: View {
                             }
                         }
                         Section {
-                            Text("Each entry is an immutable generation candidate. Ready historical candidates can be opened only by you as a private, read-only preview. They cannot be switched or republished without the current review flow.")
+                            Text("Each entry is an immutable generation candidate. Ready historical candidates can be opened only by you as a private, read-only preview. They cannot replace or publish over the current candidate.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
@@ -1197,7 +1198,7 @@ private struct HistoricalCandidatePreviewSheet: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Private historical candidate · Version \(version.version)")
                         .font(.headline)
-                    Text("This is a read-only preview visible only to you. It cannot replace the current candidate or be published outside the current review flow.")
+                    Text("This is a read-only preview visible only to you. It cannot replace or publish over the current candidate.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

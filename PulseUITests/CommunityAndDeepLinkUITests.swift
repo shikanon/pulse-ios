@@ -572,25 +572,6 @@ final class CommunityAndDeepLinkUITests: XCTestCase {
 
     private func createOwnedPublishedWorkFixture(title: String) async throws -> String {
         let workID = try await createOwnedVersionFixture(title: title)
-        let reviewURL = try XCTUnwrap(URL(string: "\(isolatedAPIBaseURL)/works/\(workID)/content-review-requests"))
-        var reviewRequest = URLRequest(url: reviewURL)
-        reviewRequest.httpMethod = "POST"
-        let (_, reviewResponse) = try await URLSession.shared.data(for: reviewRequest)
-        XCTAssertEqual((reviewResponse as? HTTPURLResponse)?.statusCode, 200, "Could not submit the public-share fixture for content review")
-
-        let moderationURL = try XCTUnwrap(URL(string: "\(isolatedAPIBaseURL)/admin/works/\(workID)"))
-        var moderationRequest = URLRequest(url: moderationURL)
-        moderationRequest.httpMethod = "PATCH"
-        moderationRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        moderationRequest.setValue("local-operator", forHTTPHeaderField: "X-Pulse-Admin")
-        moderationRequest.httpBody = try JSONSerialization.data(withJSONObject: [
-            "contentReviewStatus": "approved",
-            "ageRating": "4+",
-            "reason": "Approve a fixture used to verify sharing from current live work details."
-        ])
-        let (_, moderationResponse) = try await URLSession.shared.data(for: moderationRequest)
-        XCTAssertEqual((moderationResponse as? HTTPURLResponse)?.statusCode, 200, "Could not approve the public-share fixture")
-
         let publishURL = try XCTUnwrap(URL(string: "\(isolatedAPIBaseURL)/works/\(workID)/publish"))
         var publishRequest = URLRequest(url: publishURL)
         publishRequest.httpMethod = "POST"
@@ -620,25 +601,6 @@ final class CommunityAndDeepLinkUITests: XCTestCase {
 
     private func createOwnedRevokedWorkFixture(title: String) async throws -> String {
         let workID = try await createOwnedVersionFixture(title: title)
-        let reviewURL = try XCTUnwrap(URL(string: "\(isolatedAPIBaseURL)/works/\(workID)/content-review-requests"))
-        var reviewRequest = URLRequest(url: reviewURL)
-        reviewRequest.httpMethod = "POST"
-        let (_, reviewResponse) = try await URLSession.shared.data(for: reviewRequest)
-        XCTAssertEqual((reviewResponse as? HTTPURLResponse)?.statusCode, 200, "Could not submit the revoked-link fixture for content review")
-
-        let moderationURL = try XCTUnwrap(URL(string: "\(isolatedAPIBaseURL)/admin/works/\(workID)"))
-        var moderationRequest = URLRequest(url: moderationURL)
-        moderationRequest.httpMethod = "PATCH"
-        moderationRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        moderationRequest.setValue("local-operator", forHTTPHeaderField: "X-Pulse-Admin")
-        moderationRequest.httpBody = try JSONSerialization.data(withJSONObject: [
-            "contentReviewStatus": "approved",
-            "ageRating": "4+",
-            "reason": "Approve a fixture used to verify the creator lifecycle UI."
-        ])
-        let (_, moderationResponse) = try await URLSession.shared.data(for: moderationRequest)
-        XCTAssertEqual((moderationResponse as? HTTPURLResponse)?.statusCode, 200, "Could not approve the revoked-link fixture")
-
         let publishURL = try XCTUnwrap(URL(string: "\(isolatedAPIBaseURL)/works/\(workID)/publish"))
         var publishRequest = URLRequest(url: publishURL)
         publishRequest.httpMethod = "POST"

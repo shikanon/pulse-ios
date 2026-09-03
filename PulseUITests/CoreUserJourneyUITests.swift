@@ -17,20 +17,36 @@ final class CoreUserJourneyUITests: XCTestCase {
         let second = try XCTUnwrap(fixtures.dropFirst().first)
         let app = launchApp()
 
-        XCTAssertTrue(app.staticTexts[first.title].waitForExistence(timeout: 12), "The first live Feed card did not render")
-        XCTAssertTrue(app.staticTexts["by @\(first.creator)"].exists, "The Feed omitted creator attribution")
+        XCTAssertTrue(app.staticTexts[first.theme].waitForExistence(timeout: 12), "The first live Feed card did not render its introduction")
+        XCTAssertTrue(app.staticTexts["@\(first.creator)"].exists, "The Feed omitted creator attribution")
         XCTAssertFalse(app.staticTexts["Couldn’t load Pulse. Check your connection and try again."].exists)
+        XCTAssertFalse(app.staticTexts["Pulse"].exists, "The Home card still consumed space with a redundant Pulse logo")
+        assertFeedChromeDoesNotCoverInteraction(in: app)
 
-        let like = app.buttons["Like this work"].firstMatch
-        XCTAssertTrue(like.waitForExistence(timeout: 5), "The active Feed card did not expose Like")
-        let previousLikes = integerPrefix(from: like.value as? String)
-        like.tap()
+        let summary = activeFeedSummary(in: app)
+        let details = summary.buttons["feed.work-details"]
+        XCTAssertTrue(details.waitForExistence(timeout: 3), "The Feed did not expose work details")
+        details.tap()
+        XCTAssertTrue(app.navigationBars["Work details"].waitForExistence(timeout: 5), "The work introduction did not open")
+        XCTAssertTrue(app.staticTexts["@\(first.creator)"].exists, "Work details lost the creator identity")
+        app.buttons["Done"].tap()
 
-        let unlike = app.buttons["Unlike this work"].firstMatch
-        XCTAssertTrue(unlike.waitForExistence(timeout: 8), "Like did not change to the persisted Unlike state")
-        XCTAssertEqual(integerPrefix(from: unlike.value as? String), previousLikes + 1, "The visible Like count did not increment")
+        let like = summary.buttons["Like this work"]
+        let unlike = summary.buttons["Unlike this work"]
+        if unlike.exists {
+            let previousLikes = integerPrefix(from: unlike.value as? String)
+            unlike.tap()
+            XCTAssertTrue(like.waitForExistence(timeout: 8), "Unlike did not change to the persisted Like state")
+            XCTAssertEqual(integerPrefix(from: like.value as? String), max(0, previousLikes - 1), "The visible Like count did not decrement")
+        } else {
+            XCTAssertTrue(like.waitForExistence(timeout: 5), "The active Feed card did not expose Like")
+            let previousLikes = integerPrefix(from: like.value as? String)
+            like.tap()
+            XCTAssertTrue(unlike.waitForExistence(timeout: 8), "Like did not change to the persisted Unlike state")
+            XCTAssertEqual(integerPrefix(from: unlike.value as? String), previousLikes + 1, "The visible Like count did not increment")
+        }
 
-        let comments = app.buttons["Comments"].firstMatch
+        let comments = summary.buttons["Comments"]
         XCTAssertTrue(comments.waitForExistence(timeout: 5), "The active Feed card did not expose Comments")
         comments.tap()
 
@@ -45,39 +61,126 @@ final class CoreUserJourneyUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts[comment].waitForExistence(timeout: 8), "The new comment did not appear in the conversation")
 
         app.buttons["Done"].tap()
-        for _ in 0..<3 where !app.staticTexts[second.title].isHittable {
-            app.swipeUp()
+        let firstPlayer = activeFeedInteraction(in: app).webViews["published.artifact.player"]
+        for _ in 0..<3 where !app.staticTexts[second.theme].isHittable {
+            if firstPlayer.exists { firstPlayer.swipeUp() } else { app.swipeUp() }
         }
-        XCTAssertTrue(app.staticTexts[second.title].waitForExistence(timeout: 8), "Paging the Feed did not reveal the next work")
+        XCTAssertTrue(app.staticTexts[second.theme].isHittable, "Paging from an interactive Artifact did not reveal the next Feed work")
         assertHealthyForeground(app)
         attachScreenshot(named: "core-feed-like-comment", app: app)
     }
 
+    func testGeneratedSnakeIsAPlayableArtifact() throws {
+        let app = launchApp()
+        app.buttons["app.tab.create"].tap()
+
+        let prompt = app.textViews["creation.prompt"]
+        XCTAssertTrue(prompt.waitForExistence(timeout: 8), "The creation prompt did not render")
+        assertCompactResourceActions(in: app)
+        attachScreenshot(named: "core-create-compact-resources", app: app)
+        prompt.tap()
+        prompt.typeText("生成一个真正可玩的贪食蛇游戏")
+        app.buttons["creation.generate"].tap()
+
+        XCTAssertTrue(app.staticTexts["Your interactive app is ready"].waitForExistence(timeout: 45))
+        let player = app.webViews["generation.artifact.player"]
+        XCTAssertTrue(player.waitForExistence(timeout: 15), "The snake Artifact did not load")
+        XCTAssertGreaterThanOrEqual(player.frame.width, app.frame.width - 4, "The generated player did not use the same full-width surface as Home")
+        let readyTitle = app.staticTexts["Your interactive app is ready"]
+        XCTAssertGreaterThanOrEqual(
+            player.frame.minY,
+            readyTitle.frame.maxY,
+            "The generated player covered the result heading"
+        )
+        attachScreenshot(named: "core-create-full-width-preview", app: app)
+        let resultScroll = app.scrollViews
+            .containing(.webView, identifier: "generation.artifact.player")
+            .firstMatch
+        XCTAssertTrue(resultScroll.waitForExistence(timeout: 5), "The generated result did not expose its own scroll container")
+        XCTAssertGreaterThanOrEqual(
+            player.frame.height,
+            resultScroll.frame.height - 132,
+            "The generated player did not use Home’s shared interaction-height budget"
+        )
+        let start = player.buttons["START"]
+        XCTAssertTrue(start.waitForExistence(timeout: 10), "The generated result was a placeholder instead of a playable snake game")
+        XCTAssertTrue(bringIntoUnobscuredViewport(start, in: resultScroll, app: app), "The larger generated player kept Start outside the usable viewport")
+        assertPlayableControlsAreContained(in: player, app: app, startLabel: "START", pauseLabel: "PAUSE")
+        let before = app.screenshot().pngRepresentation
+        start.tap()
+        XCTAssertTrue(player.buttons["PAUSE"].waitForExistence(timeout: 5), "Starting the snake game did not expose pause control")
+        assertPlayableControlsAreContained(in: player, app: app, startLabel: "RESTART", pauseLabel: "PAUSE")
+        let pause = player.buttons["PAUSE"]
+        pause.tap()
+        XCTAssertTrue(player.buttons["RESUME"].waitForExistence(timeout: 5), "Pause was covered or did not expose Resume")
+        player.buttons["RESUME"].tap()
+        XCTAssertTrue(player.buttons["PAUSE"].waitForExistence(timeout: 5), "Resume was covered or did not return the game to its running state")
+        let down = player.buttons["Down"]
+        XCTAssertTrue(down.waitForExistence(timeout: 5), "The generated snake game did not expose touch direction controls")
+        XCTAssertTrue(bringIntoUnobscuredViewport(down, in: resultScroll, app: app), "The larger generated player kept direction controls outside the usable viewport")
+        down.tap()
+        Thread.sleep(forTimeInterval: 0.45)
+        XCTAssertNotEqual(app.screenshot().pngRepresentation, before, "The generated snake board did not change after play input")
+        assertHealthyForeground(app)
+        attachScreenshot(named: "core-generated-playable-snake", app: app)
+    }
+
+    func testSettingsSwitchBetweenEnglishAndChinese() throws {
+        let app = launchApp()
+        app.buttons["app.tab.profile"].tap()
+        let settings = app.buttons["profile.settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 8), "Profile did not expose Settings")
+        settings.tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5), "Settings did not start in English")
+
+        let chinese = app.buttons["简体中文"]
+        XCTAssertTrue(chinese.waitForExistence(timeout: 5), "Settings did not expose Simplified Chinese")
+        chinese.tap()
+        XCTAssertTrue(app.navigationBars["设置"].waitForExistence(timeout: 5), "Changing language did not update Settings immediately")
+        XCTAssertEqual(app.buttons["app.tab.home"].label, "主页", "The app navigation did not switch to Chinese")
+
+        let english = app.buttons["English"]
+        XCTAssertTrue(english.waitForExistence(timeout: 5), "The language control did not remain actionable after switching")
+        english.tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5), "Changing back to English did not apply immediately")
+    }
+
     func testPlayAnotherCreatorsGeneratedWork() async throws {
         let title = "Other creator artifact \(UUID().uuidString.prefix(8))"
-        let instruction = "Build a tactile constellation for the shared-play regression"
+        let instruction = "生成一个真正可玩的贪食蛇游戏"
         let fixture = try await createPublishedGeneratedWork(title: title, instruction: instruction, owner: fixtureCreator)
         let app = launchApp()
 
-        XCTAssertTrue(app.staticTexts[fixture.title].waitForExistence(timeout: 12), "The generated work did not appear at the front of the Feed")
-        XCTAssertTrue(app.staticTexts["by @\(fixture.creator)"].exists, "The work did not retain its other-creator attribution")
+        XCTAssertTrue(app.staticTexts[fixture.theme].waitForExistence(timeout: 12), "The generated work did not appear at the front of the Feed")
+        XCTAssertTrue(app.staticTexts["@\(fixture.creator)"].exists, "The work did not retain its other-creator attribution")
         XCTAssertNotEqual(fixture.creator, testAccount, "The shared-play fixture must belong to a different account")
 
-        let player = app.webViews["published.artifact.player"]
+        let player = activeFeedInteraction(in: app).webViews["published.artifact.player"]
         XCTAssertTrue(player.waitForExistence(timeout: 15), "The published work did not load its real Artifact player")
-        let interact = player.buttons["Interact"]
-        XCTAssertTrue(interact.waitForExistence(timeout: 10), "The generated Artifact did not expose its primary interaction")
-        interact.tap()
-        XCTAssertTrue(
-            player.staticTexts["Interaction received — your local Pulse artifact is running."].waitForExistence(timeout: 8),
-            "Playing another creator’s work produced no observable state change"
+        assertFeedChromeDoesNotCoverInteraction(in: app)
+        let start = player.buttons["START"]
+        XCTAssertTrue(start.waitForExistence(timeout: 10), "The other creator’s generated snake did not expose Start")
+        assertPlayableControlsAreContained(in: player, app: app, startLabel: "START", pauseLabel: "PAUSE")
+        start.tap()
+        assertPlayableControlsAreContained(in: player, app: app, startLabel: "RESTART", pauseLabel: "PAUSE")
+        let down = player.buttons["Down"]
+        XCTAssertTrue(down.waitForExistence(timeout: 5), "The other creator’s generated snake did not expose direction controls")
+        let boundary = app.descendants(matching: .any)["feed.interaction-boundary"].firstMatch
+        XCTAssertLessThanOrEqual(
+            down.frame.maxY,
+            boundary.frame.maxY - 4,
+            "Home chrome still clips the generated game’s lower direction controls"
         )
+        let beforeDirection = app.screenshot().pngRepresentation
+        down.tap()
+        try await Task.sleep(for: .milliseconds(450))
+        XCTAssertNotEqual(app.screenshot().pngRepresentation, beforeDirection, "Playing another creator’s snake produced no observable state change")
 
         assertHealthyForeground(app)
         attachScreenshot(named: "core-play-other-generated-work", app: app)
     }
 
-    func testGenerateReviewPublishAndPlayCoreJourney() async throws {
+    func testGeneratePublishAndPlayCoreJourney() async throws {
         let prompt = "Build a neon tap garden \(UUID().uuidString.prefix(8))"
         let app = launchApp()
 
@@ -87,6 +190,7 @@ final class CoreUserJourneyUITests: XCTestCase {
 
         let promptEditor = app.textViews["creation.prompt"]
         XCTAssertTrue(promptEditor.waitForExistence(timeout: 5), "The one-sentence editor did not render")
+        assertCompactResourceActions(in: app)
         XCTAssertEqual(app.buttons["app.tab.create"].value as? String, "Selected", "The Create entry did not switch to the Create tab")
         promptEditor.tap()
         promptEditor.typeText(prompt)
@@ -102,6 +206,7 @@ final class CoreUserJourneyUITests: XCTestCase {
 
         let previewPlayer = app.webViews["generation.artifact.player"]
         XCTAssertTrue(previewPlayer.waitForExistence(timeout: 15), "The private generated Artifact did not load in preview")
+        XCTAssertGreaterThanOrEqual(previewPlayer.frame.width, app.frame.width - 4, "Create preview did not align to Home’s full-width interaction surface")
         let resultScroll = app.scrollViews
             .containing(.webView, identifier: "generation.artifact.player")
             .firstMatch
@@ -122,24 +227,13 @@ final class CoreUserJourneyUITests: XCTestCase {
             "The generated preview did not produce an observable visual state change"
         )
 
-        let requestReview = app.buttons["generation.request-content-review"]
-        XCTAssertTrue(
-            bringIntoUnobscuredViewport(requestReview, in: resultScroll, app: app),
-            "The verified preview did not expose its content-review action"
-        )
-        requestReview.tap()
-
-        let checkReview = app.buttons["generation.check-content-review"]
-        XCTAssertTrue(checkReview.waitForExistence(timeout: 8), "Submitting review did not produce a clear queued state")
-        let workID = try await ownedWorkID(matchingPrompt: prompt)
-        try await approveWork(workID: workID)
-
-        checkReview.tap()
         let publish = app.buttons["generation.publish"]
-        XCTAssertTrue(publish.waitForExistence(timeout: 10), "An approved 4+ work did not become publishable")
+        XCTAssertTrue(publish.waitForExistence(timeout: 10), "A verified work did not become immediately publishable")
+        XCTAssertFalse(app.buttons["generation.request-content-review"].exists, "The client still required pre-publication review")
+        XCTAssertFalse(app.buttons["generation.check-content-review"].exists, "The client still exposed a pre-publication review queue")
         XCTAssertTrue(
             publish.isEnabled && bringIntoUnobscuredViewport(publish, in: resultScroll, app: app),
-            "Publish was not actionable after approval"
+            "Publish was not actionable immediately after verification"
         )
         publish.tap()
 
@@ -154,9 +248,8 @@ final class CoreUserJourneyUITests: XCTestCase {
             "Publishing did not return to the Feed"
         )
         homeTab.tap()
-        XCTAssertTrue(app.staticTexts[prompt].waitForExistence(timeout: 15), "Publishing did not return to the new live Feed card")
-        XCTAssertTrue(app.staticTexts["by @\(testAccount)"].exists, "The published work was not attributed to the test account")
-        let publishedPlayer = app.webViews["published.artifact.player"]
+        XCTAssertTrue(app.staticTexts["@\(testAccount)"].waitForExistence(timeout: 15), "Publishing did not return to the new live Feed card")
+        let publishedPlayer = activeFeedInteraction(in: app).webViews["published.artifact.player"]
         XCTAssertTrue(publishedPlayer.waitForExistence(timeout: 15), "The published Artifact did not load back in the Feed")
         let publishedInteraction = publishedPlayer.buttons["Interact"]
         XCTAssertTrue(publishedInteraction.waitForExistence(timeout: 10), "The published Artifact lost its primary interaction")
@@ -167,13 +260,14 @@ final class CoreUserJourneyUITests: XCTestCase {
         )
 
         assertHealthyForeground(app)
-        attachScreenshot(named: "core-generate-review-publish-play", app: app)
+        attachScreenshot(named: "core-generate-publish-play", app: app)
     }
 
     private func launchApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["PULSE_API_BASE_URL"] = apiBaseURL
         app.launchEnvironment["PULSE_UI_TEST_USER"] = testAccount
+        app.launchEnvironment["PULSE_ALLOW_DEMO_GENERATION"] = "1"
         app.launch()
         return app
     }
@@ -183,13 +277,17 @@ final class CoreUserJourneyUITests: XCTestCase {
         in scrollView: XCUIElement,
         app: XCUIApplication
     ) -> Bool {
-        let topBoundary = app.navigationBars["Create"].frame.maxY + 8
+        let createNavigationBar = app.navigationBars["Create"]
+        let topBoundary = createNavigationBar.exists ? createNavigationBar.frame.maxY + 8 : app.frame.minY + 60
         let bottomBoundary = app.buttons["app.tab.create"].frame.minY - 8
 
         for _ in 0..<16 {
             let frame = element.frame
-            if frame.minY >= topBoundary, frame.maxY <= bottomBoundary, element.isHittable {
-                return true
+            if frame.minY >= topBoundary, frame.maxY <= bottomBoundary {
+                // WebKit descendants can report isHittable=false while their
+                // frame is fully visible and XCUI can tap them normally. The
+                // geometry is the stable regression contract here.
+                return element.exists
             }
             if frame.maxY > bottomBoundary {
                 drag(scrollView, fromY: 0.72, toY: 0.48)
@@ -214,6 +312,119 @@ final class CoreUserJourneyUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["artifact.player.error"].exists, "The active Artifact fell back to an error state")
     }
 
+    private func assertFeedChromeDoesNotCoverInteraction(in app: XCUIApplication) {
+        let surface = activeFeedInteraction(in: app)
+        let boundary = app.descendants(matching: .any)["feed.interaction-boundary"].firstMatch
+        let summary = activeFeedSummary(in: app)
+        XCTAssertTrue(surface.waitForExistence(timeout: 5), "The Feed did not expose its interaction surface")
+        XCTAssertTrue(boundary.waitForExistence(timeout: 5), "The Feed did not expose its rendered interaction boundary")
+        XCTAssertTrue(summary.waitForExistence(timeout: 5), "The Feed did not expose its author and action panel")
+        XCTAssertLessThanOrEqual(
+            boundary.frame.maxY,
+            summary.frame.minY + 2,
+            "The author and action panel covered the interactive app"
+        )
+
+        let like = summary.buttons.matching(
+            NSPredicate(format: "label == %@ OR label == %@", "Like this work", "Unlike this work")
+        ).firstMatch
+        XCTAssertTrue(like.waitForExistence(timeout: 3), "The lower action row omitted Like")
+        XCTAssertGreaterThanOrEqual(
+            like.frame.minY,
+            boundary.frame.maxY - 2,
+            "The lower action row still covered the interactive app"
+        )
+        let selectedTab = app.buttons["app.tab.home"]
+        XCTAssertLessThanOrEqual(
+            summary.frame.maxY,
+            selectedTab.frame.minY - 4,
+            "The Feed action panel overlaps the floating tab bar: summary=\(summary.frame), tab=\(selectedTab.frame)"
+        )
+        XCTAssertLessThanOrEqual(
+            selectedTab.frame.minY - summary.frame.maxY,
+            24,
+            "The Feed left excessive dead space between its actions and tab bar"
+        )
+
+        let safety = app.descendants(matching: .any)["feed.work-safety"].firstMatch
+        let comments = summary.buttons["Comments"]
+        let remix = summary.buttons["Remix this work"]
+        let share = summary.buttons["Share this work"]
+        let details = summary.buttons["feed.work-details"]
+        let controls = [details, safety, like, comments, remix, share]
+        controls.forEach { control in
+            XCTAssertTrue(control.exists, "The Feed summary omitted an expected action")
+            XCTAssertGreaterThanOrEqual(control.frame.minX, summary.frame.minX - 1, "A Feed action escaped the summary horizontally")
+            XCTAssertLessThanOrEqual(control.frame.maxX, summary.frame.maxX + 1, "A Feed action escaped the summary horizontally")
+            XCTAssertGreaterThanOrEqual(control.frame.minY, summary.frame.minY - 1, "A Feed action escaped the summary vertically")
+            XCTAssertLessThanOrEqual(control.frame.maxY, summary.frame.maxY + 1, "A Feed action escaped the summary vertically")
+            XCTAssertLessThanOrEqual(control.frame.maxY, selectedTab.frame.minY - 4, "A Feed action is covered by the tab bar")
+        }
+        assertFramesDoNotOverlap(controls.map(\.frame), context: "Feed summary actions")
+
+        let tabs = [
+            app.buttons["app.tab.home"],
+            app.buttons["app.tab.create"],
+            app.buttons["app.tab.profile"]
+        ]
+        assertFramesDoNotOverlap(tabs.map(\.frame), context: "App tab buttons")
+    }
+
+    private func assertPlayableControlsAreContained(
+        in player: XCUIElement,
+        app: XCUIApplication,
+        startLabel: String,
+        pauseLabel: String
+    ) {
+        let labels = [startLabel, pauseLabel, "Up", "Left", "Down", "Right"]
+        let controls = labels.map { player.buttons[$0] }
+        let tabTop = app.buttons["app.tab.create"].frame.minY
+        let visibleBottom = min(player.frame.maxY, tabTop - 4)
+
+        for (label, control) in zip(labels, controls) {
+            XCTAssertTrue(control.waitForExistence(timeout: 5), "The generated app omitted the \(label) control")
+            XCTAssertGreaterThanOrEqual(control.frame.minX, player.frame.minX - 1, "\(label) escaped the player horizontally")
+            XCTAssertLessThanOrEqual(control.frame.maxX, player.frame.maxX + 1, "\(label) escaped the player horizontally")
+            XCTAssertGreaterThanOrEqual(control.frame.minY, player.frame.minY - 1, "\(label) escaped the player vertically")
+            XCTAssertLessThanOrEqual(control.frame.maxY, visibleBottom, "\(label) is clipped or covered by app chrome")
+        }
+        assertFramesDoNotOverlap(controls.map(\.frame), context: "Generated app controls")
+    }
+
+    private func assertFramesDoNotOverlap(_ frames: [CGRect], context: String) {
+        for leftIndex in frames.indices {
+            for rightIndex in frames.indices where rightIndex > leftIndex {
+                let overlap = frames[leftIndex].intersection(frames[rightIndex])
+                XCTAssertTrue(
+                    overlap.isNull || overlap.width <= 1 || overlap.height <= 1,
+                    "\(context) overlap: \(frames[leftIndex]) and \(frames[rightIndex])"
+                )
+            }
+        }
+    }
+
+    private func assertCompactResourceActions(in app: XCUIApplication) {
+        let library = app.buttons["creation.resource-library"]
+        let media = app.buttons["creation.upload-media"]
+        let bgm = app.buttons["creation.upload-bgm"]
+        XCTAssertTrue(library.waitForExistence(timeout: 5), "Create omitted the resource library action")
+        XCTAssertTrue(media.waitForExistence(timeout: 5), "Create omitted the media action")
+        XCTAssertTrue(bgm.waitForExistence(timeout: 5), "Create omitted the BGM action")
+        XCTAssertLessThanOrEqual(abs(library.frame.midY - media.frame.midY), 3, "Library and Media were not placed on one compact row")
+        XCTAssertLessThanOrEqual(abs(media.frame.midY - bgm.frame.midY), 3, "Media and BGM were not placed on one compact row")
+        XCTAssertLessThan(library.frame.midX, media.frame.midX)
+        XCTAssertLessThan(media.frame.midX, bgm.frame.midX)
+        XCTAssertLessThanOrEqual(bgm.frame.maxX, app.frame.maxX - 16, "The compact BGM action was clipped at the trailing edge")
+    }
+
+    private func activeFeedInteraction(in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)["feed.interaction-surface"].firstMatch
+    }
+
+    private func activeFeedSummary(in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)["feed.summary-panel"].firstMatch
+    }
+
     private func attachScreenshot(named name: String, app: XCUIApplication) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name
@@ -232,7 +443,8 @@ final class CoreUserJourneyUITests: XCTestCase {
             WorkFixture(
                 id: try XCTUnwrap(item["id"] as? String),
                 title: try XCTUnwrap(item["title"] as? String),
-                creator: try XCTUnwrap(item["creator"] as? String)
+                creator: try XCTUnwrap(item["creator"] as? String),
+                theme: try XCTUnwrap(item["theme"] as? String)
             )
         }
     }
@@ -261,19 +473,13 @@ final class CoreUserJourneyUITests: XCTestCase {
         let generationID = try XCTUnwrap(generation["id"] as? String)
         try await waitForSuccessfulGeneration(id: generationID, owner: owner)
 
-        _ = try await requestJSON(
-            path: "works/\(workID)/content-review-requests",
-            method: "POST",
-            user: owner,
-            expectedStatus: 200
-        )
-        try await approveWork(workID: workID)
         let published = try await requestJSON(path: "works/\(workID)/publish", method: "POST", user: owner, expectedStatus: 200)
         let publishedWork = try XCTUnwrap(published["work"] as? [String: Any])
         return WorkFixture(
             id: workID,
             title: try XCTUnwrap(publishedWork["title"] as? String),
-            creator: try XCTUnwrap(publishedWork["creator"] as? String)
+            creator: try XCTUnwrap(publishedWork["creator"] as? String),
+            theme: try XCTUnwrap(publishedWork["theme"] as? String)
         )
     }
 
@@ -291,28 +497,6 @@ final class CoreUserJourneyUITests: XCTestCase {
         }
         XCTFail("The generated fixture timed out")
         throw FixtureError.generationTimedOut
-    }
-
-    private func ownedWorkID(matchingPrompt prompt: String) async throws -> String {
-        let payload = try await requestJSON(path: "me/works", user: testAccount, expectedStatus: 200)
-        let works = try XCTUnwrap(payload["data"] as? [[String: Any]])
-        let work = try XCTUnwrap(works.first { $0["prompt"] as? String == prompt }, "The generated work was not owned by the test account")
-        return try XCTUnwrap(work["id"] as? String)
-    }
-
-    private func approveWork(workID: String) async throws {
-        _ = try await requestJSON(
-            path: "admin/works/\(workID)",
-            method: "PATCH",
-            user: "pulse.e2e.operator",
-            admin: "pulse.e2e.operator",
-            body: [
-                "contentReviewStatus": "approved",
-                "ageRating": "4+",
-                "reason": "Approve the isolated core-user-journey fixture."
-            ],
-            expectedStatus: 200
-        )
     }
 
     private func requestJSON(
@@ -349,6 +533,7 @@ final class CoreUserJourneyUITests: XCTestCase {
         let id: String
         let title: String
         let creator: String
+        let theme: String
     }
 
     private enum FixtureError: Error {

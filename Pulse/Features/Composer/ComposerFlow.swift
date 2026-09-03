@@ -5,25 +5,35 @@ import UniformTypeIdentifiers
 struct CreateView: View {
     let parent: InteractiveApp?
     let recoveryWork: InteractiveApp?
+    let interactionViewportHeight: CGFloat?
     let onPublished: () -> Void
 
-    init(parent: InteractiveApp? = nil, recoveryWork: InteractiveApp? = nil, onPublished: @escaping () -> Void) {
+    init(
+        parent: InteractiveApp? = nil,
+        recoveryWork: InteractiveApp? = nil,
+        interactionViewportHeight: CGFloat? = nil,
+        onPublished: @escaping () -> Void
+    ) {
         self.parent = parent
         self.recoveryWork = recoveryWork
+        self.interactionViewportHeight = interactionViewportHeight
         self.onPublished = onPublished
     }
 
     private var isRemix: Bool { parent != nil || recoveryWork?.creationMode == .remix }
 
     var body: some View {
-        NavigationStack {
-            ComposerFlow(
-                parent: parent,
-                initialPrompt: recoveryWork?.prompt ?? (parent == nil ? "" : "Make it softer, slower, and add a violet midnight glow."),
-                resumeWork: recoveryWork
-            ) { _ in onPublished() }
-                .navigationTitle(isRemix ? "Remix" : "Create")
-                .navigationBarTitleDisplayMode(.inline)
+        GeometryReader { viewport in
+            NavigationStack {
+                ComposerFlow(
+                    parent: parent,
+                    initialPrompt: recoveryWork?.prompt ?? (parent == nil ? "" : "Make it softer, slower, and add a violet midnight glow."),
+                    resumeWork: recoveryWork,
+                    interactionViewportHeight: max(interactionViewportHeight ?? 0, viewport.size.height)
+                ) { _ in onPublished() }
+                    .navigationTitle(isRemix ? "Remix" : "Create")
+                    .navigationBarTitleDisplayMode(.inline)
+            }
         }
     }
 }
@@ -33,11 +43,17 @@ struct RemixSheet: View {
     let original: InteractiveApp
 
     var body: some View {
-        NavigationStack {
-            ComposerFlow(parent: original, initialPrompt: "Make it softer, slower, and add a violet midnight glow.") { _ in dismiss() }
-                .navigationTitle("Remix")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+        GeometryReader { viewport in
+            NavigationStack {
+                ComposerFlow(
+                    parent: original,
+                    initialPrompt: "Make it softer, slower, and add a violet midnight glow.",
+                    interactionViewportHeight: viewport.size.height
+                ) { _ in dismiss() }
+                    .navigationTitle("Remix")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+            }
         }
     }
 }
@@ -65,6 +81,7 @@ private struct ComposerFlow: View {
     @AppStorage(CreationPreferences.allowRemixByDefaultKey) private var allowsRemixByDefault = CreationPreferences.defaultAllowRemix
     let parent: InteractiveApp?
     let resumeWork: InteractiveApp?
+    let interactionViewportHeight: CGFloat
     let onPublished: (InteractiveApp) -> Void
     @State private var prompt: String
     @State private var pickerItems: [PhotosPickerItem] = []
@@ -76,8 +93,6 @@ private struct ComposerFlow: View {
     @State private var isSubmitting = false
     @State private var isImporting = false
     @State private var isPublishing = false
-    @State private var isRequestingContentReview = false
-    @State private var isCheckingContentReview = false
     @State private var errorMessage: String?
     @State private var isPlanPresented = false
     @State private var isResourceLibraryPresented = false
@@ -95,10 +110,19 @@ private struct ComposerFlow: View {
     @State private var requiresAuthentication = false
     @State private var pendingCreationIntent: PendingCreationIntent?
     @State private var promptFocusRequest = 0
+    @State private var generationCapabilities: GenerationCapabilities?
+    @State private var generationCapabilityCheckFailed = false
 
-    init(parent: InteractiveApp?, initialPrompt: String, resumeWork: InteractiveApp? = nil, onPublished: @escaping (InteractiveApp) -> Void) {
+    init(
+        parent: InteractiveApp?,
+        initialPrompt: String,
+        resumeWork: InteractiveApp? = nil,
+        interactionViewportHeight: CGFloat,
+        onPublished: @escaping (InteractiveApp) -> Void
+    ) {
         self.parent = parent
         self.resumeWork = resumeWork
+        self.interactionViewportHeight = interactionViewportHeight
         self.onPublished = onPublished
         _prompt = State(initialValue: initialPrompt)
         _work = State(initialValue: resumeWork)
@@ -120,10 +144,10 @@ private struct ComposerFlow: View {
                 if job.stage.isTerminal {
                     TerminalSurface(
                         work: work, job: job, plan: plan, verification: verification, isPublishing: isPublishing,
-                        isRequestingContentReview: isRequestingContentReview, isCheckingContentReview: isCheckingContentReview,
-                        publishingError: errorMessage, publish: publish, requestContentReview: requestContentReview,
-                        checkContentReview: checkContentReview, showPlan: { isPlanPresented = true }, restart: restart,
-                        retryGeneration: retryGeneration, isRetryingGeneration: isRetryingGeneration
+                        publishingError: errorMessage, publish: publish,
+                        showPlan: { isPlanPresented = true }, restart: restart,
+                        retryGeneration: retryGeneration, isRetryingGeneration: isRetryingGeneration,
+                        interactionViewportHeight: interactionViewportHeight
                     )
                 }
                 else {
@@ -143,6 +167,8 @@ private struct ComposerFlow: View {
                     isImporting: isImporting, isSubmitting: isSubmitting, activeUpload: activeAssetUpload, errorMessage: errorMessage,
                     promptFocusRequest: promptFocusRequest,
                     canAddPrivateAssets: session.canPerformMemberActions,
+                    generationAvailability: generationAvailability,
+                    retryGenerationAvailability: { Task { await loadGenerationCapabilities() } },
                     browseLibrary: { requestAuthenticationForAssets { isResourceLibraryPresented = true } },
                     importBGM: { requestAuthenticationForAssets { isBGMImporterPresented = true } },
                     requestAuthentication: requestAuthenticationForCreation,
@@ -177,6 +203,7 @@ private struct ComposerFlow: View {
             requiresAuthentication = false
         }
         .task(id: "\(draftOwnerID):\(draftParentWorkID?.uuidString ?? "original")") { await restoreDraftOrGeneration() }
+        .task { await loadGenerationCapabilities() }
         .task(id: "\(job?.id.uuidString ?? "none"):\(scenePhase == .active)") {
             guard scenePhase == .active else { return }
             await pollGeneration()
@@ -341,6 +368,10 @@ private struct ComposerFlow: View {
     private func submit() {
         let instruction = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !instruction.isEmpty, !isSubmitting, !isImporting else { return }
+        guard generationAvailability.canGenerate else {
+            errorMessage = "AI generation is not available on this server. Ask the operator to connect the live model service, then try again."
+            return
+        }
         guard session.canPerformMemberActions else {
             pendingCreationIntent = PendingCreationIntent(parentWorkID: draftParentWorkID, instruction: instruction)
             requiresAuthentication = true
@@ -387,6 +418,32 @@ private struct ComposerFlow: View {
                 ])
             }
             isSubmitting = false
+        }
+    }
+
+    private var generationAvailability: GenerationAvailability {
+        if let generationCapabilities {
+            if generationCapabilities.usesLiveModel { return .live }
+            return allowsLocalTestGeneration ? .localTest : .notConfigured
+        }
+        return generationCapabilityCheckFailed ? .unavailable : .checking
+    }
+
+    private var allowsLocalTestGeneration: Bool {
+#if DEBUG
+        model.api.isLocalDevelopmentServer && ProcessInfo.processInfo.environment["PULSE_ALLOW_DEMO_GENERATION"] == "1"
+#else
+        false
+#endif
+    }
+
+    private func loadGenerationCapabilities() async {
+        generationCapabilityCheckFailed = false
+        do {
+            generationCapabilities = try await model.api.fetchGenerationCapabilities()
+        } catch {
+            generationCapabilities = nil
+            generationCapabilityCheckFailed = true
         }
     }
 
@@ -796,34 +853,6 @@ private struct ComposerFlow: View {
         }
     }
 
-    private func requestContentReview() {
-        guard let work, !isRequestingContentReview else { return }
-        isRequestingContentReview = true
-        errorMessage = nil
-        Task {
-            do {
-                self.work = try await model.requestContentReview(work.id)
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-            isRequestingContentReview = false
-        }
-    }
-
-    private func checkContentReview() {
-        guard let work, !isCheckingContentReview else { return }
-        isCheckingContentReview = true
-        errorMessage = nil
-        Task {
-            do {
-                self.work = try await model.api.fetchWork(id: work.id)
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-            isCheckingContentReview = false
-        }
-    }
-
     private func restart() {
         work = nil
         job = nil
@@ -897,6 +926,8 @@ private struct InputSurface: View {
     let errorMessage: String?
     let promptFocusRequest: Int
     let canAddPrivateAssets: Bool
+    let generationAvailability: GenerationAvailability
+    let retryGenerationAvailability: () -> Void
     let browseLibrary: () -> Void
     let importBGM: () -> Void
     let requestAuthentication: () -> Void
@@ -908,7 +939,7 @@ private struct InputSurface: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 18) {
                 if let parent {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("REMIX OF").font(.caption2.weight(.bold)).foregroundStyle(Color.pulseViolet)
@@ -943,7 +974,7 @@ private struct InputSurface: View {
                                 .allowsHitTesting(false)
                         }
                         TextEditor(text: $prompt)
-                            .scrollContentBackground(.hidden).frame(minHeight: 145).padding(12)
+                            .scrollContentBackground(.hidden).frame(minHeight: 120).padding(12)
                             .focused($isPromptFocused)
                             .accessibilityLabel(isRemix ? "Describe what should change in this Remix" : "Describe the interactive app you want to create")
                             .accessibilityHint("A single sentence is enough. Images, video, and BGM are optional.")
@@ -953,37 +984,55 @@ private struct InputSurface: View {
                     .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.12)))
                 }
 
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         Text("Resource library").font(.headline)
                         Spacer()
                         Text("\(assets.count)/8 · Optional").font(.caption).foregroundStyle(.secondary)
                     }
-                    Button(action: browseLibrary) {
-                        Label(canAddPrivateAssets ? "Browse public and private resources" : "Sign in to add resources", systemImage: "square.grid.2x2")
-                            .frame(maxWidth: .infinity).padding(.vertical, 13)
-                    }
-                    .buttonStyle(.borderedProminent).tint(.pulseViolet)
-                    .disabled(isImporting || isSubmitting)
-                    .accessibilityIdentifier("creation.resource-library")
-                    if canAddPrivateAssets {
-                        PhotosPicker(selection: $pickerItems, maxSelectionCount: 4, matching: .any(of: [.images, .videos])) {
-                            Label(isImporting ? "Preparing resources…" : "Upload private images or videos", systemImage: "photo.on.rectangle.angled")
-                                .frame(maxWidth: .infinity).padding(.vertical, 13)
+                    HStack(alignment: .top, spacing: 9) {
+                        ResourceActionButton(title: "Library", symbol: "square.grid.2x2", prominent: true, action: browseLibrary)
+                            .disabled(isImporting || isSubmitting)
+                            .accessibilityLabel(canAddPrivateAssets ? "Browse public and private resources" : "Sign in to add resources")
+                            .accessibilityIdentifier("creation.resource-library")
+
+                        if canAddPrivateAssets {
+                            PhotosPicker(selection: $pickerItems, maxSelectionCount: 4, matching: .any(of: [.images, .videos])) {
+                                VStack(spacing: 7) {
+                                    Image(systemName: "photo.on.rectangle.angled")
+                                        .font(.title3.weight(.semibold))
+                                    Text(isImporting ? "Preparing" : "Media")
+                                        .font(.caption.weight(.semibold))
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.8)
+                                }
+                                .foregroundStyle(Color.white.opacity(0.9))
+                                .frame(maxWidth: .infinity, minHeight: 64)
+                                .background(Color.white.opacity(0.075), in: RoundedRectangle(cornerRadius: 14))
+                                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.16)))
+                                .contentShape(RoundedRectangle(cornerRadius: 14))
+                            }
+                            .buttonStyle(.plain)
+                            .frame(maxWidth: .infinity)
+                            .disabled(isImporting || isSubmitting || assets.count >= 8)
+                            .accessibilityLabel(isImporting ? "Preparing resources" : "Upload private images or videos")
+                            .accessibilityIdentifier("creation.upload-media")
+                        } else {
+                            ResourceActionButton(title: "Media", symbol: "person.crop.circle.badge.plus", action: requestAuthentication)
+                                .disabled(isSubmitting)
+                                .accessibilityLabel("Sign in to upload private images or videos")
+                                .accessibilityIdentifier("creation.upload-media")
                         }
-                        .buttonStyle(.bordered).tint(.white).disabled(isImporting || isSubmitting || assets.count >= 8)
-                    } else {
-                        Button(action: requestAuthentication) {
-                            Label("Sign in to upload private images or videos", systemImage: "person.crop.circle.badge.plus")
-                                .frame(maxWidth: .infinity).padding(.vertical, 13)
-                        }
-                        .buttonStyle(.bordered).tint(.white).disabled(isSubmitting)
+
+                        ResourceActionButton(
+                            title: "BGM",
+                            symbol: canAddPrivateAssets ? "music.note.list" : "person.crop.circle.badge.plus",
+                            action: importBGM
+                        )
+                        .disabled(isImporting || isSubmitting || assets.count >= 8)
+                        .accessibilityLabel(canAddPrivateAssets ? "Upload private BGM" : "Sign in to upload private BGM")
+                        .accessibilityIdentifier("creation.upload-bgm")
                     }
-                    Button(action: importBGM) {
-                        Label(canAddPrivateAssets ? "Upload private BGM" : "Sign in to upload private BGM", systemImage: canAddPrivateAssets ? "music.note.list" : "person.crop.circle.badge.plus")
-                            .frame(maxWidth: .infinity).padding(.vertical, 13)
-                    }
-                    .buttonStyle(.bordered).tint(.white).disabled(isImporting || isSubmitting || assets.count >= 8)
                     if let activeUpload {
                         AssetUploadStatusView(upload: activeUpload, cancel: cancelUpload, retry: retryUpload)
                     }
@@ -1008,22 +1057,117 @@ private struct InputSurface: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                GenerationAvailabilityRow(availability: generationAvailability, retry: retryGenerationAvailability)
                 Button(action: submit) {
                     HStack {
                         if isSubmitting { ProgressView().tint(.black) }
-                        Text(canAddPrivateAssets ? (isRemix ? "Create Remix" : "Generate interactive app") : (isRemix ? "Sign in to create Remix" : "Sign in to generate"))
+                        Text(canAddPrivateAssets ? (isRemix ? "Create Remix with AI" : "Generate with AI") : (isRemix ? "Sign in to create Remix" : "Sign in to generate"))
                             .fontWeight(.bold)
                     }
                         .frame(maxWidth: .infinity).padding(.vertical, 15)
                 }
                 .buttonStyle(.borderedProminent).tint(.pulseLime).foregroundStyle(.black)
-                .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmitting || isImporting)
+                .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmitting || isImporting || !generationAvailability.canGenerate)
                 .accessibilityIdentifier("creation.generate")
-            }.padding(.horizontal, 22).padding(.top, 22).padding(.bottom, 120)
+            }.padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 28)
         }
         .onChange(of: promptFocusRequest) { _, _ in
             isPromptFocused = true
         }
+    }
+}
+
+private enum GenerationAvailability: Equatable {
+    case checking
+    case live
+    case localTest
+    case notConfigured
+    case unavailable
+
+    var canGenerate: Bool { self == .live || self == .localTest }
+}
+
+private struct GenerationAvailabilityRow: View {
+    let availability: GenerationAvailability
+    let retry: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            switch availability {
+            case .checking:
+                ProgressView().tint(Color.pulseViolet)
+                Text("Checking AI generator…")
+            case .live:
+                Image(systemName: "sparkles").foregroundStyle(Color.pulseLime)
+                Text("Live AI generation is ready")
+            case .localTest:
+                Image(systemName: "wrench.and.screwdriver.fill").foregroundStyle(Color.pulseViolet)
+                Text("Local test generator · automated testing only")
+            case .notConfigured:
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Color.pulseCoral)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("AI generation is not configured")
+                        .fontWeight(.semibold)
+                    Text("Connect the server to a live model before generating.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            case .unavailable:
+                Image(systemName: "wifi.exclamationmark").foregroundStyle(Color.pulseCoral)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Couldn’t check the AI generator")
+                        .fontWeight(.semibold)
+                    Button("Try again", action: retry)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(Color.pulseViolet)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .font(.footnote)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("creation.generation-availability")
+    }
+}
+
+private struct ResourceActionButton: View {
+    let title: LocalizedStringKey
+    let symbol: String
+    var prominent = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ResourceActionLabel(title: title, symbol: symbol, prominent: prominent)
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
+    }
+}
+
+private struct ResourceActionLabel: View {
+    let title: LocalizedStringKey
+    let symbol: String
+    var prominent = false
+
+    var body: some View {
+        VStack(spacing: 7) {
+            Image(systemName: symbol)
+                .font(.title3.weight(.semibold))
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .foregroundStyle(prominent ? Color.white : Color.white.opacity(0.9))
+        .frame(maxWidth: .infinity, minHeight: 64)
+        .background(prominent ? Color.pulseViolet : Color.white.opacity(0.075), in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(prominent ? Color.pulseViolet : Color.white.opacity(0.16)))
+        .contentShape(RoundedRectangle(cornerRadius: 14))
     }
 }
 
@@ -1303,25 +1447,21 @@ private struct TerminalSurface: View {
     let plan: GenerationPlan?
     let verification: VerificationReport?
     let isPublishing: Bool
-    let isRequestingContentReview: Bool
-    let isCheckingContentReview: Bool
     let publishingError: String?
     let publish: () -> Void
-    let requestContentReview: () -> Void
-    let checkContentReview: () -> Void
     let showPlan: () -> Void
     let restart: () -> Void
     let retryGeneration: () -> Void
     let isRetryingGeneration: Bool
+    let interactionViewportHeight: CGFloat
 
     var body: some View {
         switch job.stage {
         case .succeeded, .fallbackReady:
             PreviewSurface(
                 work: work, job: job, plan: plan, verification: verification, isPublishing: isPublishing,
-                isRequestingContentReview: isRequestingContentReview, isCheckingContentReview: isCheckingContentReview,
-                publishingError: publishingError, publish: publish, requestContentReview: requestContentReview,
-                checkContentReview: checkContentReview, showPlan: showPlan
+                publishingError: publishingError, publish: publish, showPlan: showPlan,
+                interactionViewportHeight: interactionViewportHeight
             )
         case .failed, .cancelled:
             FailureSurface(
@@ -1404,123 +1544,107 @@ private struct PreviewSurface: View {
     let plan: GenerationPlan?
     let verification: VerificationReport?
     let isPublishing: Bool
-    let isRequestingContentReview: Bool
-    let isCheckingContentReview: Bool
     let publishingError: String?
     let publish: () -> Void
-    let requestContentReview: () -> Void
-    let checkContentReview: () -> Void
     let showPlan: () -> Void
+    let interactionViewportHeight: CGFloat
     @State private var touch = CGPoint(x: 0.5, y: 0.55)
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                Text(job.verificationGrade == .fallback ? "A preview version is ready" : "Your interactive app is ready")
-                    .font(.title.weight(.bold))
-                GeometryReader { proxy in
-                    if let artifactID = job.artifactID {
-                        ArtifactPlayerView(
-                            url: model.artifactURL(for: artifactID),
-                            isActive: PulseAccessibility.runtimeIsActive(
-                                isVisible: true,
-                                isApplicationActive: scenePhase == .active,
-                                isSystemRuntimeAvailable: runtimeLifecycle.allowsRuntime
-                            ),
-                            title: work.title,
-                            interactionSummary: work.theme,
-                            accessibilityIdentifier: "generation.artifact.player",
-                            telemetryScreen: "generation_preview"
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 24))
-                    } else {
-                        LivingCanvas(
-                            app: work,
-                            touchPoint: $touch,
-                            isActive: PulseAccessibility.runtimeIsActive(
-                                isVisible: true,
-                                isApplicationActive: scenePhase == .active,
-                                isSystemRuntimeAvailable: runtimeLifecycle.allowsRuntime
+        GeometryReader { viewport in
+            let viewportHeightIncludingTopSafeArea = max(
+                interactionViewportHeight,
+                viewport.size.height + viewport.frame(in: .global).minY
+            )
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(job.verificationGrade == .fallback ? "A preview version is ready" : "Your interactive app is ready")
+                        .font(.title.weight(.bold))
+                        .padding(.horizontal, 20)
+                        .padding(.top, 12)
+                        .padding(.bottom, 10)
+                    GeometryReader { proxy in
+                        if let artifactID = job.artifactID {
+                            ArtifactPlayerView(
+                                url: model.artifactURL(for: artifactID),
+                                isActive: PulseAccessibility.runtimeIsActive(
+                                    isVisible: true,
+                                    isApplicationActive: scenePhase == .active,
+                                    isSystemRuntimeAvailable: runtimeLifecycle.allowsRuntime
+                                ),
+                                title: work.title,
+                                interactionSummary: work.theme,
+                                accessibilityIdentifier: "generation.artifact.player",
+                                telemetryScreen: "generation_preview"
                             )
-                        )
-                            .gesture(DragGesture(minimumDistance: 0).onChanged { value in touch = CGPoint(x: value.location.x / proxy.size.width, y: value.location.y / proxy.size.height) })
-                            .accessibilityIdentifier("generation.preview.canvas")
-                            .accessibilityValue("touch-x-\(Int(touch.x * 100))-y-\(Int(touch.y * 100))")
-                            .clipShape(RoundedRectangle(cornerRadius: 24))
+                            .frame(width: proxy.size.width, height: proxy.size.height)
+                            .clipped()
+                        } else {
+                            LivingCanvas(
+                                app: work,
+                                touchPoint: $touch,
+                                isActive: PulseAccessibility.runtimeIsActive(
+                                    isVisible: true,
+                                    isApplicationActive: scenePhase == .active,
+                                    isSystemRuntimeAvailable: runtimeLifecycle.allowsRuntime
+                                )
+                            )
+                                .gesture(DragGesture(minimumDistance: 0).onChanged { value in touch = CGPoint(x: value.location.x / proxy.size.width, y: value.location.y / proxy.size.height) })
+                                .accessibilityIdentifier("generation.preview.canvas")
+                                .accessibilityValue("touch-x-\(Int(touch.x * 100))-y-\(Int(touch.y * 100))")
+                                .frame(width: proxy.size.width, height: proxy.size.height)
+                                .clipped()
+                        }
                     }
-                }.frame(height: 360)
-                HStack {
-                    Label(job.verificationGrade.rawValue.capitalized, systemImage: job.verificationGrade == .fallback ? "shield.lefthalf.filled" : "checkmark.seal.fill")
-                        .foregroundStyle(job.verificationGrade == .fallback ? Color.pulseViolet : Color.pulseLime)
-                    Spacer()
-                    if let verification { Text("Score \(Int(verification.score.rounded()))").font(.caption).foregroundStyle(.secondary) }
-                    else { Text("Verification summary unavailable").font(.caption).foregroundStyle(Color.pulseCoral) }
-                }
-                Text(verification?.summary ?? (job.verificationGrade == .fallback ? "The standard version did not pass every gate. This simplified version is available for review." : "This version is ready for review. The detailed verification summary could not be loaded."))
-                    .font(.subheadline).foregroundStyle(.secondary)
-                if let verification {
-                    ForEach(verification.checks.filter(\.hardGate)) { check in
-                        Label(check.summary, systemImage: check.status == "passed" ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                            .font(.caption).foregroundStyle(check.status == "passed" ? Color.pulseLime : Color.pulseCoral)
+                    .frame(
+                        width: viewport.size.width,
+                        height: InteractiveSurfaceLayout.interactionHeight(in: viewportHeightIncludingTopSafeArea)
+                    )
+
+                    VStack(alignment: .leading, spacing: 14) {
+                    HStack {
+                        Label(job.verificationGrade.rawValue.capitalized, systemImage: job.verificationGrade == .fallback ? "shield.lefthalf.filled" : "checkmark.seal.fill")
+                            .foregroundStyle(job.verificationGrade == .fallback ? Color.pulseViolet : Color.pulseLime)
+                        Spacer()
+                        if let verification { Text("Score \(Int(verification.score.rounded()))").font(.caption).foregroundStyle(.secondary) }
+                        else { Text("Verification summary unavailable").font(.caption).foregroundStyle(Color.pulseCoral) }
                     }
+                    Text(verification?.summary ?? (job.verificationGrade == .fallback ? "The standard version did not pass every gate. This simplified version is available for review." : "This version is ready for review. The detailed verification summary could not be loaded."))
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    if let verification {
+                        ForEach(verification.checks.filter(\.hardGate)) { check in
+                            Label(check.summary, systemImage: check.status == "passed" ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                                .font(.caption).foregroundStyle(check.status == "passed" ? Color.pulseLime : Color.pulseCoral)
+                        }
+                    }
+                    if plan != nil { Button(action: showPlan) { Label("Review plan and acceptance cases", systemImage: "doc.text") }.buttonStyle(.bordered) }
+                    if canPublish {
+                        Button(action: publish) {
+                            HStack { if isPublishing { ProgressView().tint(.black) }; Text("Publish to Pulse").fontWeight(.bold) }
+                                .frame(maxWidth: .infinity).padding(.vertical, 15)
+                        }.buttonStyle(.borderedProminent).tint(.pulseLime).foregroundStyle(.black).disabled(isPublishing)
+                            .accessibilityIdentifier("generation.publish")
+                        Label("Publishes immediately. Pulse may remove content that violates the community guidelines after review.", systemImage: "checkmark.shield")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("generation.publish-moderation-notice")
+                    } else {
+                        publishingGateNotice
+                    }
+                    if let publishingError {
+                        Label(publishingError, systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(Color.pulseCoral)
+                            .accessibilityLabel(publishingError)
+                    }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                    .padding(.bottom, 28)
                 }
-                if plan != nil { Button(action: showPlan) { Label("Review plan and acceptance cases", systemImage: "doc.text") }.buttonStyle(.bordered) }
-                if canPublish {
-                    Button(action: publish) {
-                        HStack { if isPublishing { ProgressView().tint(.black) }; Text("Publish to Pulse").fontWeight(.bold) }
-                            .frame(maxWidth: .infinity).padding(.vertical, 15)
-                    }.buttonStyle(.borderedProminent).tint(.pulseLime).foregroundStyle(.black).disabled(isPublishing)
-                        .accessibilityIdentifier("generation.publish")
-                } else if canRequestContentReview {
-                    contentReviewSubmission
-                } else {
-                    publishingGateNotice
-                }
-                if let publishingError {
-                    Label(publishingError, systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(Color.pulseCoral)
-                        .accessibilityLabel(publishingError)
-                }
-            }.padding(22).padding(.bottom, 110)
-        }
-    }
-
-    @ViewBuilder
-    private var contentReviewSubmission: some View {
-        if work.contentReviewRequestedAt == nil {
-            Button(action: requestContentReview) {
-                HStack {
-                    if isRequestingContentReview { ProgressView().tint(.black) }
-                    Text(isRequestingContentReview ? "Submitting for review…" : "Submit for 4+ content review").fontWeight(.bold)
-                }
-                .frame(maxWidth: .infinity).padding(.vertical, 15)
             }
-            .buttonStyle(.borderedProminent).tint(.pulseViolet).foregroundStyle(.white).disabled(isRequestingContentReview)
-            .accessibilityIdentifier("generation.request-content-review")
-            reviewQueueNotice("Your verified build remains private until a reviewer approves it for the 4+ catalog.")
-        } else {
-            reviewQueueNotice("Your content-review request is queued. Your build remains private while a reviewer decides whether it meets the 4+ catalog policy.")
-            Button(action: checkContentReview) {
-                HStack {
-                    if isCheckingContentReview { ProgressView() }
-                    Text(isCheckingContentReview ? "Checking review status…" : "Check review status")
-                }
-                .frame(maxWidth: .infinity).padding(.vertical, 13)
-            }
-            .buttonStyle(.bordered).tint(.white).disabled(isCheckingContentReview)
-            .accessibilityIdentifier("generation.check-content-review")
         }
-    }
-
-    private func reviewQueueNotice(_ message: String) -> some View {
-        Label(message, systemImage: "clock.badge.checkmark")
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(Color.pulseViolet)
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.pulseViolet.opacity(0.14), in: RoundedRectangle(cornerRadius: 14))
-            .accessibilityLabel(message)
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     private var publishingGateNotice: some View {
@@ -1534,24 +1658,34 @@ private struct PreviewSurface: View {
     }
 
     private var canPublish: Bool {
-        job.verificationGrade == .verified && work.contentReviewStatus == .approved && work.ageRating == .fourPlus
-    }
-
-    private var canRequestContentReview: Bool {
-        job.verificationGrade == .verified && work.contentReviewStatus == .pending
+        guard job.verificationGrade == .verified,
+              job.artifactID != nil,
+              work.status == .draft
+        else { return false }
+        switch work.contentReviewStatus {
+        case .pending, nil:
+            return true
+        case .approved:
+            return work.ageRating == .fourPlus
+        case .rejected:
+            return false
+        }
     }
 
     private var publishingGateMessage: String {
         if job.verificationGrade != .verified {
             return "This preview is not eligible for public release. Only independently verified builds can be published."
         }
+        if work.status == .hidden || work.contentReviewStatus == .rejected {
+            return "This work was taken down after publication. Only a Pulse administrator can restore it after the issue is resolved."
+        }
         switch work.contentReviewStatus {
         case .pending, nil:
-            return "Content review is required before public release. A reviewer must approve this work for the 4+ catalog."
+            return "This verified build is ready to publish."
         case .rejected:
-            return "This work was not approved for public release. Review the feedback with your support contact before creating another version."
+            return "This work was taken down after review. Resolve the issue before asking Pulse Support about restoration."
         case .approved:
-            return "This work is approved for \(work.ageRating?.rawValue ?? "a different age band"), which is outside the 4+ launch catalog."
+            return "This work is classified as \(work.ageRating?.rawValue ?? "a different age band"), which is outside the public 4+ catalog."
         }
     }
 }

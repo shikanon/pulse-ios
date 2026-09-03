@@ -29,34 +29,35 @@ struct FeedView: View {
                 ContentUnavailableView("The feed is empty", systemImage: "sparkles", description: Text("Create the first interactive app or try loading again."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity).background(.black)
             } else {
-                ScrollView(.vertical) {
-                    LazyVStack(spacing: 0) {
-                        ForEach(model.feed) { app in
-                            FeedCard(
-                                app: app,
-                                isActive: activeAppID == app.id,
-                                isApplicationActive: scenePhase == .active && isTabSelected,
-                                isSystemRuntimeAvailable: runtimeLifecycle.allowsRuntime,
-                                isRemixPresented: selectedApp != nil || isRemixAuthenticationPresented || offlineActionMessage != nil,
-                                onRemix: { requestRemix(app) }
-                            )
-                                .containerRelativeFrame(.vertical)
+                GeometryReader { viewport in
+                    ScrollView(.vertical) {
+                        LazyVStack(spacing: 0) {
+                            ForEach(model.feed) { app in
+                                FeedCard(
+                                    app: app,
+                                    isActive: activeAppID == app.id,
+                                    isApplicationActive: scenePhase == .active && isTabSelected,
+                                    isSystemRuntimeAvailable: runtimeLifecycle.allowsRuntime,
+                                    isRemixPresented: selectedApp != nil || isRemixAuthenticationPresented || offlineActionMessage != nil,
+                                    onRemix: { requestRemix(app) }
+                                )
+                                .frame(width: viewport.size.width, height: viewport.size.height)
                                 .id(app.id)
+                            }
+                            if model.isLoadingMoreFeed {
+                                ProgressView("Loading more Pulse…")
+                                    .frame(width: viewport.size.width, height: viewport.size.height)
+                                    .background(.black)
+                            }
                         }
-                        if model.isLoadingMoreFeed {
-                            ProgressView("Loading more Pulse…")
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 20)
-                                .background(.black)
-                        }
+                        .scrollTargetLayout()
                     }
-                    .scrollTargetLayout()
-                }
-                .scrollTargetBehavior(.paging)
-                .scrollIndicators(.hidden)
-                .scrollPosition(id: $activeAppID)
-                .refreshable {
-                    await model.refreshFeed()
+                    .scrollTargetBehavior(.paging)
+                    .scrollIndicators(.hidden)
+                    .scrollPosition(id: $activeAppID, anchor: .top)
+                    .refreshable {
+                        await model.refreshFeed()
+                    }
                 }
             }
             if model.isLoadingFeed {
@@ -77,6 +78,8 @@ struct FeedView: View {
                 .padding(.horizontal)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color.black)
         .sheet(item: $selectedApp) { app in RemixSheet(original: app) }
         .sheet(isPresented: $isRemixAuthenticationPresented) {
             AuthenticationRequiredView(
@@ -204,6 +207,7 @@ private struct FeedCard: View {
     @State private var touchPoint = CGPoint(x: 0.5, y: 0.62)
     @State private var isSharePresented = false
     @State private var isCommentsPresented = false
+    @State private var isDetailsPresented = false
     @State private var isReportPresented = false
     @State private var isCommunityGuidelinesPresented = false
     @State private var isLikeAuthenticationPresented = false
@@ -237,61 +241,86 @@ private struct FeedCard: View {
 
     var body: some View {
         GeometryReader { proxy in
-            ZStack {
-                if !model.isOfflineReadOnly, let artifactURL, isActive {
-                    ArtifactPlayerView(
-                        url: artifactURL,
-                        isActive: isRuntimeActive,
-                        title: app.title,
-                        interactionSummary: app.theme,
-                        accessibilityIdentifier: "published.artifact.player",
-                        telemetryScreen: "feed"
-                    )
-                        .padding(.bottom, 88).background(.black)
-                } else {
-                    if !isActive {
-                        FeedStaticPreview(app: app, touchPoint: $touchPoint)
-                            .accessibilityIdentifier("published.static-preview")
-                    } else {
-                        LivingCanvas(app: app, touchPoint: $touchPoint, isActive: isRuntimeActive)
-                            .allowsHitTesting(isRuntimeActive)
-                            .gesture(DragGesture(minimumDistance: 0).onChanged { value in
-                                touchPoint = CGPoint(x: value.location.x / proxy.size.width, y: value.location.y / proxy.size.height)
-                            })
-                            .accessibilityIdentifier("published.interactive.canvas")
-                            .accessibilityValue("touch-x-\(Int(touchPoint.x * 100))-y-\(Int(touchPoint.y * 100))")
-                    }
-                }
-                LinearGradient(colors: [.black.opacity(0.72), .clear, .black.opacity(0.86)], startPoint: .top, endPoint: .bottom)
-                    .allowsHitTesting(false)
+            let detailsHeight = InteractiveSurfaceLayout.homeSummaryHeight
+            let tabBarClearance = InteractiveSurfaceLayout.homeTabBarClearance
+            let interactionHeight = InteractiveSurfaceLayout.interactionHeight(in: proxy.size.height)
 
-                VStack(alignment: .leading, spacing: 0) {
-                    FeedHeader()
-                    Spacer()
-                    HStack(alignment: .bottom, spacing: 12) {
-                        AppDetails(
-                            app: app,
-                            report: requestReport,
-                            block: { requestBlock() },
-                            guidelines: { isCommunityGuidelinesPresented = true }
+            VStack(spacing: 0) {
+                ZStack {
+                    if !model.isOfflineReadOnly, let artifactURL, isActive {
+                        ArtifactPlayerView(
+                            url: artifactURL,
+                            isActive: isRuntimeActive,
+                            title: app.title,
+                            interactionSummary: app.theme,
+                            accessibilityIdentifier: "published.artifact.player",
+                            telemetryScreen: "feed"
                         )
-                        .accessibilitySortPriority(2)
-                        Spacer(minLength: 8)
-                        ActionRail(app: app, like: requestLike, comments: requestComments, remix: onRemix, share: {
-                            telemetry.record(.shareInvoked, attributes: ["screen_id": "feed"])
-                            isSharePresented = true
-                        })
-                            .accessibilitySortPriority(1)
+                        .frame(width: proxy.size.width, height: interactionHeight)
+                        .clipped()
+                        .background(.black)
+                    } else {
+                        if !isActive {
+                            FeedStaticPreview(app: app, touchPoint: $touchPoint)
+                                .accessibilityIdentifier("published.static-preview")
+                        } else {
+                            LivingCanvas(app: app, touchPoint: $touchPoint, isActive: isRuntimeActive)
+                                .allowsHitTesting(isRuntimeActive)
+                                .simultaneousGesture(SpatialTapGesture().onEnded { value in
+                                    touchPoint = CGPoint(
+                                        x: value.location.x / proxy.size.width,
+                                        y: value.location.y / interactionHeight
+                                    )
+                                })
+                                .accessibilityIdentifier("published.interactive.canvas")
+                                .accessibilityValue("touch-x-\(Int(touchPoint.x * 100))-y-\(Int(touchPoint.y * 100))")
+                            }
                     }
-                    .padding(.bottom, 115)
+
+#if DEBUG
+                    VStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        Rectangle()
+                            .fill(.white.opacity(0.001))
+                            .frame(height: 1)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("Interaction layout boundary")
+                            .accessibilityIdentifier("feed.interaction-boundary")
+                    }
+                    .allowsHitTesting(false)
+#endif
                 }
-                .padding(.horizontal, 22)
-                .padding(.top, 10)
+                .frame(width: proxy.size.width, height: interactionHeight)
+                .clipped()
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("feed.interaction-surface")
+
+                WorkSummaryPanel(
+                    app: app,
+                    details: { isDetailsPresented = true },
+                    like: requestLike,
+                    comments: requestComments,
+                    remix: onRemix,
+                    share: {
+                        telemetry.record(.shareInvoked, attributes: ["screen_id": "feed"])
+                        isSharePresented = true
+                    },
+                    report: requestReport,
+                    block: requestBlock,
+                    guidelines: { isCommunityGuidelinesPresented = true }
+                )
+                .frame(height: detailsHeight)
+
+                Color.black
+                    .frame(height: tabBarClearance)
+                    .allowsHitTesting(false)
             }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+            .background(.black)
         }
-        .ignoresSafeArea()
         .sheet(isPresented: $isSharePresented) { ShareSheet(app: app) }
         .sheet(isPresented: $isCommentsPresented) { CommentsSheet(app: app) }
+        .sheet(isPresented: $isDetailsPresented) { WorkDetailsSheet(app: app) }
         .sheet(isPresented: $isReportPresented) {
             ReportComposerSheet(targetType: "work", targetID: app.id.uuidString.lowercased(), targetTitle: app.title)
         }
@@ -426,26 +455,31 @@ private struct FeedStaticPreview: View {
     }
 }
 
-private struct FeedHeader: View {
-    var body: some View {
-        HStack {
-            Text("Pulse").font(.largeTitle.weight(.bold))
-            Spacer()
-        }
-        .padding(.top, 8)
-    }
-}
-
-private struct AppDetails: View {
+private struct WorkSummaryPanel: View {
     let app: InteractiveApp
+    let details: () -> Void
+    let like: () -> Void
+    let comments: () -> Void
+    let remix: () -> Void
+    let share: () -> Void
     let report: () -> Void
     let block: () -> Void
     let guidelines: () -> Void
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(alignment: .top) {
-                Text(app.prompt).font(.subheadline.weight(.medium)).foregroundStyle(app.accent)
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 10) {
+                Text("@\(app.creator)")
+                    .font(.title3.weight(.bold))
+                    .lineLimit(1)
                 Spacer(minLength: 8)
+                Button(action: details) {
+                    Label("Details", systemImage: "info.circle")
+                        .font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.bordered)
+                .tint(.white.opacity(0.86))
+                .accessibilityIdentifier("feed.work-details")
                 Menu {
                     Button("Report this work", systemImage: "flag") { report() }
                     Button("Block @\(app.creator)", systemImage: "hand.raised", role: .destructive) { block() }
@@ -459,52 +493,66 @@ private struct AppDetails: View {
                 .accessibilityLabel("Safety options for \(app.title)")
                 .accessibilityIdentifier("feed.work-safety")
             }
-            Text(app.title).font(.title.weight(.bold)).lineLimit(2)
-            Text("by @\(app.creator)").font(.subheadline).foregroundStyle(.white.opacity(0.72))
-            if let ageRating = app.ageRating, app.contentReviewStatus == .approved {
-                Label("Reviewed for \(ageRating.rawValue)", systemImage: "checkmark.shield.fill")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.pulseLime)
-                    .accessibilityLabel("Content reviewed for ages \(ageRating.rawValue) and up")
+
+            Text(app.theme)
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.78))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, minHeight: 20, alignment: .topLeading)
+
+            HStack(spacing: 0) {
+                FeedBottomAction(
+                    symbol: app.isLiked ? "heart.fill" : "heart",
+                    count: compactFeedCount(app.likes),
+                    accessibilityLabel: app.isLiked ? "Unlike this work" : "Like this work",
+                    accessibilityValue: "\(app.likes) likes",
+                    tint: app.isLiked ? .pulseCoral : .white,
+                    action: like
+                )
+                FeedBottomAction(
+                    symbol: "bubble.right",
+                    count: compactFeedCount(app.comments),
+                    accessibilityLabel: "Comments",
+                    accessibilityValue: "\(app.comments) comments",
+                    tint: .white,
+                    action: comments
+                )
+                FeedBottomAction(
+                    symbol: "arrow.triangle.2.circlepath",
+                    count: compactFeedCount(app.remixes),
+                    accessibilityLabel: "Remix this work",
+                    accessibilityValue: "\(app.remixes) remixes",
+                    tint: app.accent,
+                    action: remix
+                )
+                FeedBottomAction(
+                    symbol: "square.and.arrow.up",
+                    count: nil,
+                    accessibilityLabel: "Share this work",
+                    accessibilityValue: "Public link status: \(app.publicURL == nil ? "not available" : "available")",
+                    tint: .pulseViolet,
+                    action: share
+                )
             }
-            Text(app.theme).font(.subheadline).foregroundStyle(.white.opacity(0.82)).lineLimit(2)
+            .frame(maxWidth: .infinity)
         }
+        .padding(.horizontal, 18)
+        .padding(.top, 4)
+        .padding(.bottom, 2)
+        .background(.black)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(.white.opacity(0.12))
+                .frame(height: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("feed.summary-panel")
     }
 }
 
-private struct ActionRail: View {
-    let app: InteractiveApp
-    let like: () -> Void
-    let comments: () -> Void
-    let remix: () -> Void
-    let share: () -> Void
-    var body: some View {
-        VStack(spacing: 19) {
-            ActionButton(
-                symbol: app.isLiked ? "heart.fill" : "heart", displayLabel: compact(app.likes),
-                accessibilityLabel: app.isLiked ? "Unlike this work" : "Like this work",
-                accessibilityValue: "\(app.likes) likes", tint: app.isLiked ? .pulseCoral : .white
-            ) { like() }
-            ActionButton(
-                symbol: "bubble.right", displayLabel: compact(app.comments), accessibilityLabel: "Comments",
-                accessibilityValue: "\(app.comments) comments", tint: .white, action: comments
-            )
-            ActionButton(
-                symbol: "arrow.triangle.2.circlepath", displayLabel: "Remix\n\(compact(app.remixes))", accessibilityLabel: "Remix this work",
-                accessibilityValue: "\(app.remixes) remixes", tint: app.accent, action: remix
-            )
-            ActionButton(
-                symbol: "square.and.arrow.up", displayLabel: "Share", accessibilityLabel: "Share this work",
-                accessibilityValue: "Public link status: \(app.publicURL == nil ? "not available" : "available")", tint: .pulseViolet, action: share
-            )
-        }.frame(width: 71)
-    }
-    private func compact(_ number: Int) -> String { number > 999 ? String(format: "%.1fK", Double(number) / 1000) : "\(number)" }
-}
-
-private struct ActionButton: View {
+private struct FeedBottomAction: View {
     let symbol: String
-    let displayLabel: String
+    let count: String?
     let accessibilityLabel: String
     let accessibilityValue: String
     let tint: Color
@@ -512,12 +560,69 @@ private struct ActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 5) {
-                Image(systemName: symbol).font(.title2.weight(.medium))
-                Text(displayLabel).font(.caption.weight(.semibold)).multilineTextAlignment(.center)
-            }.foregroundStyle(tint)
+            HStack(spacing: 5) {
+                Image(systemName: symbol)
+                    .font(.title2.weight(.semibold))
+                if let count {
+                    Text(count)
+                        .font(.caption.weight(.semibold))
+                        .monospacedDigit()
+                }
+            }
+            .foregroundStyle(tint)
+            .frame(maxWidth: .infinity, minHeight: 42)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityValue(accessibilityValue)
     }
+}
+
+private struct WorkDetailsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let app: InteractiveApp
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    Text("@\(app.creator)")
+                        .font(.largeTitle.weight(.bold))
+                    Text(app.theme)
+                        .font(.title3)
+                        .foregroundStyle(.white.opacity(0.86))
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Creator note")
+                            .font(.headline)
+                        Text(app.prompt)
+                            .font(.body)
+                            .foregroundStyle(.white.opacity(0.76))
+                    }
+
+                    if let ageRating = app.ageRating, app.contentReviewStatus == .approved {
+                        Label("Reviewed for \(ageRating.rawValue)", systemImage: "checkmark.shield.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.pulseLime)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(24)
+            }
+            .background(.black)
+            .navigationTitle("Work details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+}
+
+private func compactFeedCount(_ number: Int) -> String {
+    number > 999 ? String(format: "%.1fK", Double(number) / 1000) : "\(number)"
 }

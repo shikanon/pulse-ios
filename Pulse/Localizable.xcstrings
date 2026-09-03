@@ -1,66 +1,107 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "error.action_unavailable" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This action is not available right now." } } }
-    },
-    "error.check_and_try_again" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Check the details and try again." } } }
-    },
-    "error.content_policy_rejected" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This can’t be submitted under Pulse community guidelines. Please revise it and try again." } } }
-    },
-    "error.content_safety_unavailable" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Pulse can’t check this right now. Your changes are still here—please try again shortly." } } }
-    },
-    "error.feature_unavailable" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This feature is temporarily unavailable." } } }
-    },
-    "error.generic" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Something went wrong. Please try again." } } }
-    },
-    "error.generation_quota_reached" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "You already have a creation in progress. Wait for it to finish or cancel it before starting another." } } }
-    },
-    "error.item_unavailable" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This item is no longer available." } } }
-    },
-    "error.permission_denied" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "You do not have permission to do that." } } }
-    },
-    "error.rate_limited" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Please wait a moment before trying again." } } }
-    },
-    "error.session_expired" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Your session has expired. Please sign in again." } } }
-    },
-    "error.terms_acceptance_required" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Review and accept the current Terms of Use to continue." } } }
-    },
-    "error.sign_in_required" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Sign in to continue." } } }
-    },
-    "error.upload_unavailable" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "The upload is unavailable right now. Please try again." } } }
-    },
-    "error.username_taken" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "That handle is unavailable. Try another one." } } }
-    },
-    "validation.invalid" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Check this entry and try again." } } }
-    },
-    "validation.out_of_range" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Use a supported value and try again." } } }
-    },
-    "validation.required" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Complete this field before continuing." } } }
-    },
-    "validation.too_long" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Shorten this entry and try again." } } }
-    },
-    "validation.unsupported" : {
-      "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose a supported option and try again." } } }
-    }
+    "About" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "关于" } } } },
+    "Account" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "账号" } } } },
+    "AI generation is not configured" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "尚未配置 AI 生成" } } } },
+    "Allow Remix for new works" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "允许他人 Remix 新作品" } } } },
+    "App language" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "应用语言" } } } },
+    "Browse public and private resources" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "浏览公共和私人素材" } } } },
+    "Check review status" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "查看审核状态" } } } },
+    "Choose whether people can Remix works you create from now on. This does not change works that already exist or are already public." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择今后创作的作品是否允许他人 Remix。现有或已公开的作品不会受到影响。" } } } },
+    "Community guidelines" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "社区规范" } } } },
+    "Comments" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "评论" } } } },
+    "Create" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "创作" } } } },
+    "Create Remix with AI" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "使用 AI 创作 Remix" } } } },
+    "Create an interactive app" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "创作互动应用" } } } },
+    "Create an original app from one sentence" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用一句话创作互动应用" } } } },
+    "Create the first interactive app or try loading again." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "创作第一个互动应用，或重新加载。" } } } },
+    "Creation defaults" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "创作默认设置" } } } },
+    "Creator note" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "创作者说明" } } } },
+    "Data controls" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "数据控制" } } } },
+    "Delete account" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "删除账号" } } } },
+    "Details" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "详情" } } } },
+    "Done" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "完成" } } } },
+    "Download your data" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "下载我的数据" } } } },
+    "Edit profile" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "编辑资料" } } } },
+    "English" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "English" } } } },
+    "Generate interactive app" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "生成互动应用" } } } },
+    "Generate with AI" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "使用 AI 生成" } } } },
+    "Get help" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "获取帮助" } } } },
+    "Home" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "主页" } } } },
+    "Interact" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "互动" } } } },
+    "Library" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "素材库" } } } },
+    "Live AI generation is ready" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "实时 AI 生成已就绪" } } } },
+    "Language" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "语言" } } } },
+    "Language changes apply immediately. Content created by people stays in its original language." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "语言切换会立即生效。用户创作的内容将保留原始语言。" } } } },
+    "Legal" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "法律信息" } } } },
+    "Like" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "点赞" } } } },
+    "Loading blocked users…" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在加载已屏蔽用户…" } } } },
+    "Loading interactive app…" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在加载互动应用…" } } } },
+    "Loading more Pulse…" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在加载更多内容…" } } } },
+    "Loading Pulse…" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在加载 Pulse…" } } } },
+    "Make something people can feel." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "创作一个让人有感觉的作品。" } } } },
+    "Media" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "图片/视频" } } } },
+    "Preparing data export…" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在准备数据导出…" } } } },
+    "Preparing" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "准备中" } } } },
+    "Privacy" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "隐私" } } } },
+    "Privacy policy" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "隐私政策" } } } },
+    "Profile" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "我的" } } } },
+    "Profile and safety settings" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "个人资料与安全设置" } } } },
+    "Publish to Pulse" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "发布到 Pulse" } } } },
+    "Publishes immediately. Pulse may remove content that violates the community guidelines after review." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "点击后立即发布。Pulse 会进行发布后审核，并可能下架违反社区规范的内容。" } } } },
+    "Pulse version" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Pulse 版本" } } } },
+    "Resource library" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "素材库" } } } },
+    "Remix" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Remix" } } } },
+    "Retry" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重试" } } } },
+    "Review plan and acceptance cases" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "查看计划与验收项" } } } },
+    "Safety" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "安全" } } } },
+    "Settings" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "设置" } } } },
+    "Share" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "分享" } } } },
+    "Share anonymous diagnostics" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "分享匿名诊断信息" } } } },
+    "Sign in to generate" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "登录后生成" } } } },
+    "Sign out" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "退出登录" } } } },
+    "Signing out…" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在退出…" } } } },
+    "Start from one sentence. Images and videos are optional." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "从一句话开始，图片和视频均为可选。" } } } },
+    "Connect the server to a live model before generating." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请先将服务器连接到实时模型，再开始生成。" } } } },
+    "Checking AI generator…" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在检查 AI 生成服务…" } } } },
+    "Couldn’t check the AI generator" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法检查 AI 生成服务" } } } },
+    "Local test generator · automated testing only" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本地测试生成器 · 仅用于自动化测试" } } } },
+    "Submit for 4+ content review" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "提交 4+ 内容审核" } } } },
+    "Support" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "支持" } } } },
+    "Terms of Use" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "使用条款" } } } },
+    "The feed is empty" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "内容流为空" } } } },
+    "Try again" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重试" } } } },
+    "Upload private BGM" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "上传私人背景音乐" } } } },
+    "Upload private images or videos" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "上传私人图片或视频" } } } },
+    "Work details" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "作品详情" } } } },
+    "Your idea" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "你的想法" } } } },
+    "Your interactive app is ready" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "你的互动应用已准备好" } } } },
+    "Your reports" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "我的举报" } } } },
+    "Your works" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "我的作品" } } } },
+    "You have not blocked anyone." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "你尚未屏蔽任何用户。" } } } },
+    "For example: make a tiny garden that reacts to each touch" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "例如：做一个会响应每次触摸的迷你花园" } } } },
+    "A preview version is ready" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "预览版本已准备好" } } } },
+    "error.action_unavailable" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This action is not available right now." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此操作目前不可用。" } } } },
+    "error.check_and_try_again" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Check the details and try again." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请检查填写内容后重试。" } } } },
+    "error.content_policy_rejected" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This can’t be submitted under Pulse community guidelines. Please revise it and try again." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此内容不符合 Pulse 社区规范，请修改后重试。" } } } },
+    "error.content_safety_unavailable" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Pulse can’t check this right now. Your changes are still here—please try again shortly." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Pulse 暂时无法检查此内容。你的更改仍已保留，请稍后重试。" } } } },
+    "error.feature_unavailable" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This feature is temporarily unavailable." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此功能暂时不可用。" } } } },
+    "error.generic" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Something went wrong. Please try again." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "出现问题，请重试。" } } } },
+    "error.generation_quota_reached" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "You already have a creation in progress. Wait for it to finish or cancel it before starting another." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已有创作正在进行，请等待完成或取消后再开始新的创作。" } } } },
+    "error.item_unavailable" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "This item is no longer available." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "此内容已不可用。" } } } },
+    "error.permission_denied" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "You do not have permission to do that." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "你没有执行此操作的权限。" } } } },
+    "error.rate_limited" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Please wait a moment before trying again." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请稍等片刻后重试。" } } } },
+    "error.session_expired" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Your session has expired. Please sign in again." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "登录状态已过期，请重新登录。" } } } },
+    "error.sign_in_required" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Sign in to continue." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请登录后继续。" } } } },
+    "error.terms_acceptance_required" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Review and accept the current Terms of Use to continue." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请阅读并接受当前使用条款后继续。" } } } },
+    "error.upload_unavailable" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "The upload is unavailable right now. Please try again." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "暂时无法上传，请重试。" } } } },
+    "error.username_taken" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "That handle is unavailable. Try another one." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "该用户名不可用，请尝试其他用户名。" } } } },
+    "validation.invalid" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Check this entry and try again." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请检查此项后重试。" } } } },
+    "validation.out_of_range" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Use a supported value and try again." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请输入支持的值后重试。" } } } },
+    "validation.required" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Complete this field before continuing." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请填写此项后继续。" } } } },
+    "validation.too_long" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Shorten this entry and try again." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请缩短此项后重试。" } } } },
+    "validation.unsupported" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose a supported option and try again." } }, "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请选择支持的选项后重试。" } } } }
   },
   "version" : "1.0"
 }

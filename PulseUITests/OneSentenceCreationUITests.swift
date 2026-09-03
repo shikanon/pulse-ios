@@ -10,6 +10,7 @@ final class OneSentenceCreationUITests: XCTestCase {
     @MainActor
     func testCreatePublishAndPlayCrazySnake() throws {
         let app = XCUIApplication()
+        app.launchEnvironment["PULSE_ALLOW_DEMO_GENERATION"] = "1"
         app.launch()
 
         let createTab = app.buttons["Create an original app from one sentence"]
@@ -52,6 +53,7 @@ final class OneSentenceCreationUITests: XCTestCase {
 
     }
 
+    @MainActor
     private func assertSnakeGameIsPlayable(in player: XCUIElement, app: XCUIApplication, context: String) {
         let start = firstButton(in: player, labels: ["START", "Start", "开始", "开始游戏"])
         XCTAssertTrue(start.waitForExistence(timeout: 10), "\(context)缺少开始游戏控件")
@@ -75,6 +77,7 @@ final class OneSentenceCreationUITests: XCTestCase {
         XCTAssertNotEqual(app.screenshot().pngRepresentation, afterStart, "\(context)点击方向键后画面没有继续变化")
     }
 
+    @MainActor
     private func firstButton(in player: XCUIElement, labels: [String]) -> XCUIElement {
         player.buttons.matching(NSPredicate(format: "label IN %@", labels)).firstMatch
     }

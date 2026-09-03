@@ -16,7 +16,7 @@ struct ShareSheet: View {
                         .padding(15).frame(maxWidth: .infinity, alignment: .leading).background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
                     ShareLink(item: shareURL) { Label("Share public link", systemImage: "square.and.arrow.up").frame(maxWidth: .infinity).padding(.vertical, 12) }.buttonStyle(.borderedProminent).tint(.pulseLime).foregroundStyle(.black)
                 } else {
-                    ContentUnavailableView("Public link unavailable", systemImage: "lock.shield", description: Text("This version is not publicly available. Its creator can submit a verified draft for review and publish it after approval."))
+                    ContentUnavailableView("Public link unavailable", systemImage: "lock.shield", description: Text("This version is not publicly available. Its creator can publish a verified draft immediately; Pulse may take it down later if it violates the community guidelines."))
                         .frame(maxWidth: .infinity)
                 }
                 Spacer()

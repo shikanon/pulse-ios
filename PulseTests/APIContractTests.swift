@@ -3,6 +3,33 @@ import XCTest
 @testable import Pulse
 
 final class APIContractTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        UserDefaults.standard.set(PulseAppLanguage.english.rawValue, forKey: PulseAppLanguage.storageKey)
+    }
+
+    func testSupportedAppLanguagesAreStableAndDistinct() {
+        XCTAssertEqual(PulseAppLanguage.allCases.map(\.rawValue), ["en", "zh-Hans"])
+        XCTAssertEqual(PulseAppLanguage.english.locale.identifier, "en")
+        XCTAssertEqual(PulseAppLanguage.simplifiedChinese.locale.identifier, "zh-Hans")
+    }
+
+    func testDynamicErrorCopyFollowsTheInAppLanguageChoice() {
+        let previous = UserDefaults.standard.string(forKey: PulseAppLanguage.storageKey)
+        defer {
+            if let previous {
+                UserDefaults.standard.set(previous, forKey: PulseAppLanguage.storageKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: PulseAppLanguage.storageKey)
+            }
+        }
+
+        UserDefaults.standard.set(PulseAppLanguage.simplifiedChinese.rawValue, forKey: PulseAppLanguage.storageKey)
+        XCTAssertEqual(PulseLocalization.apiError(code: "not_found", statusCode: 404), "此内容已不可用。")
+        UserDefaults.standard.set(PulseAppLanguage.english.rawValue, forKey: PulseAppLanguage.storageKey)
+        XCTAssertEqual(PulseLocalization.apiError(code: "not_found", statusCode: 404), "This item is no longer available.")
+    }
+
     func testLocalUITestIdentityIsDebugOnlyAndLoopbackBound() throws {
         let environment = [PulseLocalTestIdentity.environmentKey: "Pulse.E2E"]
         var localRequest = URLRequest(url: try XCTUnwrap(URL(string: "http://127.0.0.1:18787/v1/feed")))
@@ -163,6 +190,32 @@ final class APIContractTests: XCTestCase {
         XCTAssertNil(error.validationMessage(for: ["instruction"]))
         XCTAssertTrue(error.hasValidationIssue(for: "body"))
         XCTAssertFalse(error.validationMessage(for: ["body"])?.contains("body") ?? false)
+    }
+
+    func testGenerationCapabilitiesIdentifyOnlyTheLivePipelineAsModelBacked() async throws {
+        GenerationCapabilitiesURLProtocol.reset()
+        defer { GenerationCapabilitiesURLProtocol.reset() }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [GenerationCapabilitiesURLProtocol.self]
+        let client = PulseAPIClient(
+            baseURL: try XCTUnwrap(URL(string: "https://api.pulse.test/v1")),
+            urlSession: URLSession(configuration: configuration)
+        )
+
+        GenerationCapabilitiesURLProtocol.responseBody = Data(#"{"mode":"live","modelBacked":true}"#.utf8)
+        let live = try await client.fetchGenerationCapabilities()
+        XCTAssertEqual(live.mode, .live)
+        XCTAssertTrue(live.usesLiveModel)
+
+        GenerationCapabilitiesURLProtocol.responseBody = Data(#"{"mode":"deterministic-local","modelBacked":false}"#.utf8)
+        let local = try await client.fetchGenerationCapabilities()
+        XCTAssertEqual(local.mode, .deterministicLocal)
+        XCTAssertFalse(local.usesLiveModel)
+        XCTAssertEqual(
+            GenerationCapabilitiesURLProtocol.capturedPaths(),
+            ["/v1/generation-capabilities", "/v1/generation-capabilities"]
+        )
     }
 
     func testReporterHistoryUsesOnlySafeStatusCopy() {
@@ -1270,6 +1323,53 @@ private final class FeedRefreshURLProtocol: URLProtocol {
         lock.lock()
         defer { lock.unlock() }
         return requests
+    }
+}
+
+private final class GenerationCapabilitiesURLProtocol: URLProtocol {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var paths: [String] = []
+    nonisolated(unsafe) static var responseBody = Data(#"{"mode":"live","modelBacked":true}"#.utf8)
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        request.url?.host == "api.pulse.test"
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        Self.lock.lock()
+        Self.paths.append(request.url?.path ?? "")
+        let body = Self.responseBody
+        Self.lock.unlock()
+        guard let client, let url = request.url, url.path == "/v1/generation-capabilities" else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        let response = HTTPURLResponse(
+            url: url,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json"]
+        )!
+        client.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client.urlProtocol(self, didLoad: body)
+        client.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+
+    static func reset() {
+        lock.lock()
+        paths = []
+        responseBody = Data(#"{"mode":"live","modelBacked":true}"#.utf8)
+        lock.unlock()
+    }
+
+    static func capturedPaths() -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return paths
     }
 }
 

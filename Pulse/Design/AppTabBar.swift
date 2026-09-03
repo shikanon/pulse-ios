@@ -26,9 +26,9 @@ struct AppTabBar: View {
                     .foregroundStyle(selectedTab == tab ? Color.pulseLime : .white)
                     .frame(maxWidth: .infinity, minHeight: tabHeight)
                 }
-                .accessibilityLabel(tab.accessibilityLabel)
+                .accessibilityLabel(Text(tab.accessibilityLabel))
                 .accessibilityValue(selectedTab == tab ? "Selected" : "")
-                .accessibilityHint(selectedTab == tab ? "Returns to the \(tab.label) tab root" : "Switches to the \(tab.label) tab")
+                .accessibilityHint(selectedTab == tab ? "Returns to the selected tab root" : "Switches tabs")
                 .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
                 .accessibilityIdentifier("app.tab.\(tab.rawValue)")
             }

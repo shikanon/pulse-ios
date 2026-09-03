@@ -9,4 +9,4 @@ echo "Gate 1/2: XCTest contracts, state, and safety behavior"
 echo "Gate 2/2: isolated core user journeys"
 "$script_dir/run-core-user-journeys.sh"
 
-echo "Pulse client quality gate passed: browse, generate, review, publish, like, comment, and play journeys are usable."
+echo "Pulse client quality gate passed: browse, generate, publish immediately, discover on Home, like, comment, and play journeys are usable."

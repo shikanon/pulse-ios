@@ -9,6 +9,7 @@ struct ProfileSettingsView: View {
     @Environment(SessionModel.self) private var session
     @Environment(PulseTelemetry.self) private var telemetry
     @AppStorage(CreationPreferences.allowRemixByDefaultKey) private var allowsRemixByDefault = CreationPreferences.defaultAllowRemix
+    @AppStorage(PulseAppLanguage.storageKey) private var appLanguage = PulseAppLanguage.defaultLanguage.rawValue
     @State private var blockedUsers: [String] = []
     @State private var isLoadingBlockedUsers = true
     @State private var errorMessage: String?
@@ -20,6 +21,18 @@ struct ProfileSettingsView: View {
 
     var body: some View {
         List {
+            Section("Language") {
+                Picker("App language", selection: $appLanguage) {
+                    Text("English").tag(PulseAppLanguage.english.rawValue)
+                    Text("简体中文").tag(PulseAppLanguage.simplifiedChinese.rawValue)
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("settings.language")
+                Text("Language changes apply immediately. Content created by people stays in its original language.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Account") {
                 NavigationLink("Edit profile", destination: EditProfileView())
                 Button(role: .destructive) {
@@ -148,7 +161,11 @@ struct ProfileSettingsView: View {
                 .accessibilityHint("Installed app version and build number")
             }
         }
-        .navigationTitle("Settings")
+        // Navigation titles are cached by UINavigationItem and do not always
+        // re-resolve a LocalizedStringKey when the app locale changes in
+        // place. Supplying the selected bundle's resolved value keeps the
+        // currently presented screen in sync with the language picker.
+        .navigationTitle(selectedLanguage.localizedString("Settings"))
         .task { await loadBlockedUsers() }
         .fileExporter(isPresented: $isExportingFile, document: exportDocument, contentType: .json, defaultFilename: "pulse-account-export") { result in
             if case let .failure(error) = result { errorMessage = error.localizedDescription }
@@ -161,6 +178,10 @@ struct ProfileSettingsView: View {
         } message: {
             Text(errorMessage ?? "Please try again.")
         }
+    }
+
+    private var selectedLanguage: PulseAppLanguage {
+        PulseAppLanguage(rawValue: appLanguage) ?? .defaultLanguage
     }
 
     private func loadBlockedUsers() async {

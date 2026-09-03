@@ -196,6 +196,16 @@ struct PulseAPIClient: Sendable {
         ).configuration
     }
 
+    func fetchGenerationCapabilities() async throws -> GenerationCapabilities {
+        if let launchConfigurationError {
+            throw PulseAPIError(message: launchConfigurationError)
+        }
+        return try await perform(
+            makeRequest(path: "generation-capabilities", method: "GET", bodyData: nil, idempotencyKey: nil),
+            as: GenerationCapabilities.self
+        )
+    }
+
     // This endpoint is intentionally unauthenticated. The event contract has
     // no account ID, token, work ID, or free text, and avoiding an access
     // token prevents telemetry from becoming an implicit identity channel.

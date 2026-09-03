@@ -9,6 +9,7 @@
 	<key>CFBundleLocalizations</key>
 	<array>
 		<string>en</string>
+		<string>zh-Hans</string>
 	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
@@ -37,6 +38,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>PulseAPIBaseURL</key>
 	<string>$(PULSE_API_BASE_URL)</string>
+	<key>UILaunchScreen</key>
+	<dict/>
 	<key>PulseUniversalLinkHost</key>
 	<string>$(PULSE_UNIVERSAL_LINK_HOST)</string>
 </dict>
