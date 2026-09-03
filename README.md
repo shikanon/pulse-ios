@@ -32,6 +32,14 @@ scripts/run-xctest.sh
 
 脚本会创建一次性 iPhone Simulator、生成 Xcode 工程、启动并等待模拟器、真实执行 XCTest、保存 `.xcresult`，最后关闭并删除测试设备。测试结果默认写入 `.artifacts/xctest/`；任一准备、编译、资源或 XCTest 断言失败都会返回非零状态。
 
+客户端核心用户链路使用固定的本地合成账号 `pulse.e2e` 和独立临时 API 数据执行。完整门禁为：
+
+```bash
+scripts/run-client-quality-gate.sh
+```
+
+第二阶段会运行 `CoreUserJourneyUITests`，验证 Feed 浏览与翻页、点赞、评论、游玩其他创作者生成的 Artifact，以及本人从一句话生成、私有预览交互、4+ 审核、发布到 Feed 再次游玩的闭环。测试只在 Debug + loopback API 上启用合成身份，不需要也不会保存 Apple ID 或密码；账号和安全边界见 [`AGENTS.md`](AGENTS.md)。结果与截图写入 `.artifacts/core-user-journeys/`，任一核心步骤失败都会使门禁返回非零状态。
+
 GitHub Actions 使用 `.github/workflows/ios-xctest.yml` 运行同一个入口，固定选择 `macos-26`、Xcode 26.5 和 iOS 26.5 Runtime，并在成功或失败时上传 `.xcresult` 供诊断。该工作流还会以非占位 HTTPS API Origin 和 Associated Domains Host 生成并无签名编译 Release Simulator 配置，防止只在 Debug 构建中通过；它不替代真机 Archive、签名或 App Store Connect 上传。
 
 不需要模型密钥的社区与深链 XCUITest 使用独立的临时开发 API 和 iPhone Simulator：

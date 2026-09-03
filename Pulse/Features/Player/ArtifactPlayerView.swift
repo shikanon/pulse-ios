@@ -381,6 +381,7 @@ private final class ArtifactSchemeHandler: NSObject, WKURLSchemeHandler {
                 request.httpMethod = "GET"
                 request.setValue("*/*", forHTTPHeaderField: "Accept")
                 PulseClientRuntimeDeclaration.apply(to: &request)
+                PulseLocalTestIdentity.apply(to: &request, apiURL: apiURL)
                 if let session = PulseCredentialStore.load() {
                     request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
                 }

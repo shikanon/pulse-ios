@@ -1,5 +1,37 @@
 import Foundation
 
+/// XCUITest uses the development API's header authenticator so core account
+/// journeys do not depend on a real Apple ID. The hook is compiled inert in
+/// Release and additionally refuses every non-loopback API origin.
+enum PulseLocalTestIdentity {
+    static let environmentKey = "PULSE_UI_TEST_USER"
+
+    static func username(environment: [String: String] = ProcessInfo.processInfo.environment) -> String? {
+#if DEBUG
+        guard let rawValue = environment[environmentKey] else { return nil }
+        let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789._-")
+        guard (3...30).contains(value.count), value.unicodeScalars.allSatisfy(allowed.contains) else { return nil }
+        return value
+#else
+        return nil
+#endif
+    }
+
+    static func apply(
+        to request: inout URLRequest,
+        apiURL: URL,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) {
+#if DEBUG
+        guard apiURL.host == "localhost" || apiURL.host == "127.0.0.1",
+              let username = username(environment: environment)
+        else { return }
+        request.setValue(username, forHTTPHeaderField: "X-Pulse-User")
+#endif
+    }
+}
+
 struct PulseValidationIssue: Decodable, Sendable, Hashable {
     let field: String
     let rule: String
@@ -655,6 +687,7 @@ struct PulseAPIClient: Sendable {
     }
 
     private func attachAccessToken(to request: inout URLRequest) {
+        PulseLocalTestIdentity.apply(to: &request, apiURL: baseURL)
         guard let session = PulseCredentialStore.load() else { return }
         request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
     }

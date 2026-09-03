@@ -3,6 +3,31 @@ import XCTest
 @testable import Pulse
 
 final class APIContractTests: XCTestCase {
+    func testLocalUITestIdentityIsDebugOnlyAndLoopbackBound() throws {
+        let environment = [PulseLocalTestIdentity.environmentKey: "Pulse.E2E"]
+        var localRequest = URLRequest(url: try XCTUnwrap(URL(string: "http://127.0.0.1:18787/v1/feed")))
+        PulseLocalTestIdentity.apply(
+            to: &localRequest,
+            apiURL: try XCTUnwrap(URL(string: "http://127.0.0.1:18787/v1")),
+            environment: environment
+        )
+#if DEBUG
+        XCTAssertEqual(localRequest.value(forHTTPHeaderField: "X-Pulse-User"), "pulse.e2e")
+#else
+        XCTAssertNil(localRequest.value(forHTTPHeaderField: "X-Pulse-User"))
+#endif
+
+        var remoteRequest = URLRequest(url: try XCTUnwrap(URL(string: "https://api.pulse.test/v1/feed")))
+        PulseLocalTestIdentity.apply(
+            to: &remoteRequest,
+            apiURL: try XCTUnwrap(URL(string: "https://api.pulse.test/v1")),
+            environment: environment
+        )
+        XCTAssertNil(remoteRequest.value(forHTTPHeaderField: "X-Pulse-User"))
+
+        XCTAssertNil(PulseLocalTestIdentity.username(environment: [PulseLocalTestIdentity.environmentKey: "invalid user"]))
+    }
+
     func testClientConfigurationCacheIsShortLivedAndBoundToTheAPIOrigin() {
         let fileURL = FileManager.default.temporaryDirectory
             .appending(path: "pulse-client-configuration-cache-\(UUID().uuidString).json")

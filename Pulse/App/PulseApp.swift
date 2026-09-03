@@ -116,9 +116,11 @@ private struct RootView: View {
             .tabVisibility(selectedTab == .home)
 
             createTabContent
+                .padding(.bottom, 88)
                 .tabVisibility(selectedTab == .create)
 
             profileTabContent
+                .padding(.bottom, 88)
                 .tabVisibility(selectedTab == .profile)
 
             AppTabBar(selectedTab: $selectedTab, onReselect: resetTabToRoot)
