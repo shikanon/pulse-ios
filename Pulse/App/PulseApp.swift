@@ -73,6 +73,9 @@ private struct RootView: View {
         .onChange(of: scenePhase) { _, nextScenePhase in
             runtimeLifecycle.update(scenePhase: nextScenePhase)
         }
+        .onChange(of: appModel.pendingRemixSource?.id) { _, id in
+            if id != nil { selectedTab = .create }
+        }
         .onOpenURL { url in
             guard let deepLink = PulseDeepLink.parse(url) else {
                 telemetry.record(.deepLinkFailed, attributes: ["entry_point": "universal_link", "error_category": "invalid_link"])
@@ -123,6 +126,7 @@ private struct RootView: View {
                 createTabContent(viewportHeight: viewport.size.height)
                     .padding(.bottom, 88)
                     .tabVisibility(selectedTab == .create)
+                    .environment(\.creationSurfaceVisible, selectedTab == .create && appModel.sharedWork == nil && !session.needsTermsAcceptance)
 
                 profileTabContent
                     .padding(.bottom, 88)
@@ -146,6 +150,16 @@ private struct RootView: View {
         .ignoresSafeArea(edges: .bottom)
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
+                if let job = appModel.activeCreationJob, selectedTab == .home {
+                    Button { selectedTab = .create } label: {
+                        HStack {
+                            if !job.stage.isTerminal { ProgressView().tint(.pulseLime) }
+                            Text(job.stage == .succeeded ? "Your creation is ready to review" : job.stage.productTitle).font(.footnote.weight(.semibold))
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                        }.padding(12).foregroundStyle(.white).background(Color.pulseViolet.opacity(0.22))
+                    }.accessibilityIdentifier("app.creation-status")
+                }
                 if appModel.isOfflineReadOnly {
                     OfflineReadOnlyNotice(retry: { Task { await bootstrap() } })
                 }

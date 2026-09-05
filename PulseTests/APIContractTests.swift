@@ -980,6 +980,27 @@ final class APIContractTests: XCTestCase {
         XCTAssertNil(PulseEndpointConfiguration.approvedUniversalLinkHost("https://play.pulse.test"))
     }
 
+    func testDraftStorageSurvivesReloadAndKeepsAccountsSeparate() throws {
+        let owner = "draft-test-" + UUID().uuidString
+        let parent = UUID()
+        let draft = ComposerDraft.fresh(ownerID: owner, parentWorkID: parent, instruction: "猫猫俄罗斯方块", assetIDs: [UUID()])
+        defer { ComposerDraftStore.clear(ownerID: owner, parentWorkID: parent) }
+        try ComposerDraftStore.save(draft)
+        XCTAssertEqual(ComposerDraftStore.load(ownerID: owner, parentWorkID: parent), draft)
+        XCTAssertNil(ComposerDraftStore.load(ownerID: owner + "-other", parentWorkID: parent))
+        XCTAssertNil(ComposerDraftStore.load(ownerID: owner, parentWorkID: nil))
+        ComposerDraftStore.clear(ownerID: owner, parentWorkID: parent)
+        XCTAssertNil(ComposerDraftStore.load(ownerID: owner, parentWorkID: parent))
+    }
+
+    func testMaterialFailuresRequireEditingAndCapabilityDefaultsFailClosed() throws {
+        XCTAssertEqual(GenerationFailurePresentation(stage: .failed, errorCategory: "generation_input_unavailable"), .materialsUnavailable)
+        let missing = try JSONDecoder().decode(GenerationCapabilities.self, from: Data(#"{"mode":"live","modelBacked":true}"#.utf8))
+        XCTAssertNotEqual(missing.materialUploads, true)
+        let ready = try JSONDecoder().decode(GenerationCapabilities.self, from: Data(#"{"mode":"live","modelBacked":true,"materialUploads":true}"#.utf8))
+        XCTAssertEqual(ready.materialUploads, true)
+    }
+
     func testComposerDraftRoundTripsWithoutPrivateResourceBytes() throws {
         let parentID = try XCTUnwrap(UUID(uuidString: "59bcc7cc-7363-4413-8b79-b700667f2dde"))
         let assetID = try XCTUnwrap(UUID(uuidString: "30b86b66-7fd2-4cdc-9dc2-0733f4e64c25"))

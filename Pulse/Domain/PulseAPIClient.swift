@@ -535,9 +535,9 @@ struct PulseAPIClient: Sendable {
         let mode: InteractiveApp.CreationMode = remixParentID == nil ? .original : .remix
         let title = parent.map { "\($0.title) — Remix" } ?? String(instruction.prefix(28))
         let payload = CreateWorkPayload(
-            title: title, instruction: instruction, theme: parent?.theme ?? "An AI-made interactive experience",
+            title: title, instruction: instruction, theme: String(instruction.prefix(96)),
             tint: parent?.tint ?? "lime", interaction: parent?.interaction.rawValue ?? "garden",
-            creationMode: mode, parentWorkID: remixParentID?.pulsePathComponent, allowRemix: allowRemix
+            creationMode: mode, parentWorkID: remixParentID?.pulsePathComponent, parentArtifactID: parent?.artifactID?.pulsePathComponent, allowRemix: allowRemix
         )
         return try await send(path: "works", method: "POST", body: payload, idempotencyKey: idempotencyKey, as: WorkEnvelope.self).work
     }
@@ -551,8 +551,8 @@ struct PulseAPIClient: Sendable {
         ).work
     }
 
-    func startGeneration(workID: UUID, instruction: String, assetIDs: [UUID], idempotencyKey: String = UUID().uuidString) async throws -> GenerationJob {
-        let payload = CreateGenerationPayload(instruction: instruction, assetIds: assetIDs.map(\.pulsePathComponent))
+    func startGeneration(workID: UUID, instruction: String, assetIDs: [UUID], baseArtifactID: UUID? = nil, idempotencyKey: String = UUID().uuidString) async throws -> GenerationJob {
+        let payload = CreateGenerationPayload(instruction: instruction, assetIds: assetIDs.map(\.pulsePathComponent), baseArtifactId: baseArtifactID?.pulsePathComponent)
         return try await send(path: "works/\(workID.pulsePathComponent)/generations", method: "POST", body: payload, idempotencyKey: idempotencyKey, as: GenerationEnvelope.self).generation
     }
 
@@ -581,8 +581,8 @@ struct PulseAPIClient: Sendable {
         try await send(path: "verifications/\(id.pulsePathComponent)", as: VerificationEnvelope.self).verification
     }
 
-    func publish(workID: UUID) async throws -> InteractiveApp {
-        try await send(path: "works/\(workID.pulsePathComponent)/publish", method: "POST", as: WorkEnvelope.self).work
+    func publish(workID: UUID, title: String? = nil, summary: String? = nil, artifactID: UUID? = nil) async throws -> InteractiveApp {
+        try await send(path: "works/\(workID.pulsePathComponent)/publish", method: "POST", body: PublishDetails(title: title, theme: summary, artifactId: artifactID?.pulsePathComponent), as: WorkEnvelope.self).work
     }
 
     func unpublish(workID: UUID) async throws -> InteractiveApp {
@@ -789,7 +789,8 @@ private struct ProfilePayload: Encodable { let username: String; let displayName
 private struct RefreshEnvelope: Decodable { let user: PulseUser; let session: PulseSession }
 private struct ClientTelemetryPayload: Encodable { let schemaVersion: Int; let events: [PulseTelemetryEvent] }
 private struct AssetPayload: Encodable { let fileName: String; let mediaType: String; let sizeBytes: Int }
-private struct CreateGenerationPayload: Encodable { let instruction: String; let assetIds: [String] }
+private struct PublishDetails: Encodable { let title: String?; let theme: String?; let artifactId: String? }
+private struct CreateGenerationPayload: Encodable { let instruction: String; let assetIds: [String]; let baseArtifactId: String? }
 private struct UpdateWorkRemixPermissionPayload: Encodable { let allowRemix: Bool }
 struct CreateWorkPayload: Encodable {
     let title: String
@@ -799,11 +800,13 @@ struct CreateWorkPayload: Encodable {
     let interaction: String
     let creationMode: InteractiveApp.CreationMode
     let parentWorkID: String?
+    var parentArtifactID: String? = nil
     let allowRemix: Bool
 
     enum CodingKeys: String, CodingKey {
         case title, instruction, theme, tint, interaction, creationMode
         case parentWorkID = "parentWorkId"
+        case parentArtifactID = "parentArtifactId"
         case allowRemix
     }
 }

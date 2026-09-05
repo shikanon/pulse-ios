@@ -8,7 +8,6 @@ struct FeedView: View {
     @Environment(PulseTelemetry.self) private var telemetry
     @Environment(PulseRuntimeLifecycle.self) private var runtimeLifecycle
     @Environment(\.scenePhase) private var scenePhase
-    @State private var selectedApp: InteractiveApp?
     @State private var pendingRemix: InteractiveApp?
     @State private var isRemixAuthenticationPresented = false
     @State private var activeAppID: UUID?
@@ -38,7 +37,7 @@ struct FeedView: View {
                                     isActive: activeAppID == app.id,
                                     isApplicationActive: scenePhase == .active && isTabSelected,
                                     isSystemRuntimeAvailable: runtimeLifecycle.allowsRuntime,
-                                    isRemixPresented: selectedApp != nil || isRemixAuthenticationPresented || offlineActionMessage != nil,
+                                    isRemixPresented: isRemixAuthenticationPresented || offlineActionMessage != nil,
                                     onRemix: { requestRemix(app) }
                                 )
                                 .frame(width: viewport.size.width, height: viewport.size.height)
@@ -80,7 +79,6 @@ struct FeedView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.black)
-        .sheet(item: $selectedApp) { app in RemixSheet(original: app) }
         .sheet(isPresented: $isRemixAuthenticationPresented) {
             AuthenticationRequiredView(
                 title: "Sign in to Remix this work",
@@ -123,6 +121,11 @@ struct FeedView: View {
             guard let activeAppID else { return }
             await model.prefetchFeedStaticPreviews(after: activeAppID)
         }
+        .onChange(of: model.feedFocusID) { _, id in
+            guard let id, model.feed.contains(where: { $0.id == id }) else { return }
+            activeAppID = id
+            model.feedFocusID = nil
+        }
         .onChange(of: resetToken) { _, _ in
             activeAppID = model.feed.first?.id
         }
@@ -130,7 +133,7 @@ struct FeedView: View {
             guard canResume, let app = pendingRemix else { return }
             pendingRemix = nil
             isRemixAuthenticationPresented = false
-            selectedApp = app
+            model.startRemix(app)
         }
         .onChange(of: isRemixAuthenticationPresented) { wasPresented, isPresented in
             if wasPresented, !isPresented, !session.canPerformMemberActions {
@@ -141,6 +144,7 @@ struct FeedView: View {
     }
 
     private func requestRemix(_ app: InteractiveApp) {
+        guard app.allowRemix else { return }
         guard !model.isOfflineReadOnly else {
             offlineActionMessage = "Reconnect to Pulse before starting a Remix. Saved Feed cards are read-only while you’re offline."
             return
@@ -150,7 +154,7 @@ struct FeedView: View {
             isRemixAuthenticationPresented = true
             return
         }
-        selectedApp = app
+        model.startRemix(app)
     }
 }
 
@@ -222,7 +226,7 @@ private struct FeedCard: View {
         PulseAccessibility.runtimeIsActive(
             isVisible: isActive,
             isApplicationActive: isApplicationActive,
-            isObscured: model.isOfflineReadOnly || isRemixPresented || isCommentsPresented || isSharePresented || isReportPresented || isCommunityGuidelinesPresented || isLikeAuthenticationPresented || isBlockConfirmationPresented || isBlockAuthenticationPresented || blockError != nil || offlineActionMessage != nil,
+            isObscured: isDetailsPresented || model.isOfflineReadOnly || isRemixPresented || isCommentsPresented || isSharePresented || isReportPresented || isCommunityGuidelinesPresented || isLikeAuthenticationPresented || isBlockConfirmationPresented || isBlockAuthenticationPresented || blockError != nil || offlineActionMessage != nil,
             isSystemRuntimeAvailable: isSystemRuntimeAvailable
         )
     }
@@ -519,12 +523,14 @@ private struct WorkSummaryPanel: View {
                 )
                 FeedBottomAction(
                     symbol: "arrow.triangle.2.circlepath",
-                    count: compactFeedCount(app.remixes),
-                    accessibilityLabel: "Remix this work",
+                    count: app.allowRemix ? "Remix" : "Closed",
+                    accessibilityLabel: app.allowRemix ? "Remix this work" : "Remix disabled by creator",
                     accessibilityValue: "\(app.remixes) remixes",
                     tint: app.accent,
                     action: remix
                 )
+                .disabled(!app.allowRemix)
+                .opacity(app.allowRemix ? 1 : 0.45)
                 FeedBottomAction(
                     symbol: "square.and.arrow.up",
                     count: nil,

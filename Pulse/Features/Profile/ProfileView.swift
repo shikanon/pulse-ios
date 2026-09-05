@@ -372,6 +372,7 @@ private struct WorkRow: View {
         switch work.status {
         case .processing: return "Resume"
         case .draft: return "Review"
+        case .published: return "Edit"
         default: return nil
         }
     }
@@ -454,6 +455,8 @@ private struct WorkRow: View {
                             .lineLimit(1)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -622,6 +625,7 @@ private struct WorkDetailsSheet: View {
 
     private var continuationTitle: String? {
         switch work.status {
+        case .published: return "Edit a new version"
         case .processing: return "Resume generation"
         case .draft where work.generationJobID != nil:
             return work.artifactID == nil ? "Continue generation" : "Open ready version"

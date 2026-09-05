@@ -8,6 +8,7 @@ struct GenerationCapabilities: Decodable, Equatable, Sendable {
 
     let mode: Mode
     let modelBacked: Bool
+    var materialUploads: Bool? = nil
 
     var usesLiveModel: Bool { mode == .live && modelBacked }
 }
@@ -100,14 +101,14 @@ struct GenerationJob: Identifiable, Codable, Equatable, Sendable {
         var productTitle: String {
             switch self {
             case .queued: "Preparing your creation"
-            case .processingAssets: "Understanding your materials"
+            case .processingAssets: "Preparing your materials"
             case .planning: "Designing the project plan"
             case .coding: "Building the interactive app"
             case .verifying: "Running automatic checks"
             case .repairing: "Repairing the experience"
             case .fallbackBuilding: "Preparing a safe version"
             case .succeeded: "Ready to preview"
-            case .fallbackReady: "Safe version ready"
+            case .fallbackReady: "Generation needs changes"
             case .failed: "Generation needs attention"
             case .cancelled: "Generation cancelled"
             }
@@ -174,6 +175,7 @@ struct WorkVersion: Identifiable, Decodable, Equatable, Sendable {
 // server observability, but it can reveal implementation details and is not a
 // stable piece of product copy.
 enum GenerationFailurePresentation: Equatable, Sendable {
+    case materialsUnavailable
     case cancelled
     case needsChanges
     case temporarilyUnavailable
@@ -186,6 +188,8 @@ enum GenerationFailurePresentation: Equatable, Sendable {
         }
 
         switch errorCategory {
+        case "generation_input_unavailable", "asset_storage_unavailable":
+            self = .materialsUnavailable
         case "artifact_safety_check_failed", "artifact_manifest_invalid", "verification_hard_gate_failed", "verifier_report_rejected", "fallback_verification_failed", "fallback_quality_below_threshold":
             self = .needsChanges
         case "coding_agent_failed", "local_artifact_export_failed", "artifact_persist_failed", "verifier_unavailable", "fallback_transition_failed", "fallback_build_failed", "fallback_verifier_unavailable", "fallback_artifact_persist_failed":
@@ -197,6 +201,8 @@ enum GenerationFailurePresentation: Equatable, Sendable {
 
     var title: String {
         switch self {
+        case .materialsUnavailable:
+            "Materials need attention"
         case .cancelled:
             "Generation cancelled"
         case .needsChanges:
@@ -210,6 +216,8 @@ enum GenerationFailurePresentation: Equatable, Sendable {
 
     var detail: String {
         switch self {
+        case .materialsUnavailable:
+            "A selected material could not be read. Remove it or upload it again, then generate. Your idea is still here; retrying unchanged will not resolve this issue."
         case .cancelled:
             "Nothing was published. Your original instruction is still here, so you can adjust it and start again when ready."
         case .needsChanges:
@@ -223,6 +231,8 @@ enum GenerationFailurePresentation: Equatable, Sendable {
 
     var symbolName: String {
         switch self {
+        case .materialsUnavailable:
+            "photo.badge.exclamationmark"
         case .cancelled:
             "xmark.circle.fill"
         case .needsChanges:

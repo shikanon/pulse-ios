@@ -2,6 +2,16 @@ import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 
+private struct CreationSurfaceVisibleKey: EnvironmentKey {
+    static let defaultValue = true
+}
+extension EnvironmentValues {
+    var creationSurfaceVisible: Bool {
+        get { self[CreationSurfaceVisibleKey.self] }
+        set { self[CreationSurfaceVisibleKey.self] = newValue }
+    }
+}
+
 struct CreateView: View {
     let parent: InteractiveApp?
     let recoveryWork: InteractiveApp?
@@ -27,32 +37,12 @@ struct CreateView: View {
             NavigationStack {
                 ComposerFlow(
                     parent: parent,
-                    initialPrompt: recoveryWork?.prompt ?? (parent == nil ? "" : "Make it softer, slower, and add a violet midnight glow."),
+                    initialPrompt: recoveryWork?.prompt ?? "",
                     resumeWork: recoveryWork,
                     interactionViewportHeight: max(interactionViewportHeight ?? 0, viewport.size.height)
                 ) { _ in onPublished() }
                     .navigationTitle(isRemix ? "Remix" : "Create")
                     .navigationBarTitleDisplayMode(.inline)
-            }
-        }
-    }
-}
-
-struct RemixSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    let original: InteractiveApp
-
-    var body: some View {
-        GeometryReader { viewport in
-            NavigationStack {
-                ComposerFlow(
-                    parent: original,
-                    initialPrompt: "Make it softer, slower, and add a violet midnight glow.",
-                    interactionViewportHeight: viewport.size.height
-                ) { _ in dismiss() }
-                    .navigationTitle("Remix")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
             }
         }
     }
@@ -78,14 +68,19 @@ private struct ComposerFlow: View {
     @Environment(SessionModel.self) private var session
     @Environment(PulseTelemetry.self) private var telemetry
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.creationSurfaceVisible) private var creationVisible
     @AppStorage(CreationPreferences.allowRemixByDefaultKey) private var allowsRemixByDefault = CreationPreferences.defaultAllowRemix
     let parent: InteractiveApp?
     let resumeWork: InteractiveApp?
     let interactionViewportHeight: CGFloat
     let onPublished: (InteractiveApp) -> Void
+    @State private var isEditingVersion = false
     @State private var prompt: String
     @State private var pickerItems: [PhotosPickerItem] = []
     @State private var assets: [GenerationAsset] = []
+    @State private var creationContext = CreationContext()
+    @State private var isConversationPresented = false
+    @State private var editingBaseJob: GenerationJob?
     @State private var work: InteractiveApp?
     @State private var job: GenerationJob?
     @State private var plan: GenerationPlan?
@@ -135,12 +130,12 @@ private struct ComposerFlow: View {
         AssetUploadRecoveryContext(ownerID: draftOwnerID, parentWorkID: draftParentWorkID)
     }
 
-    var body: some View {
+    private var content: some View {
         Group {
             if isRestoring {
                 ProgressView("Restoring your generation…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let job, let work {
+            } else if let job, let work, !isEditingVersion {
                 if job.stage.isTerminal {
                     TerminalSurface(
                         work: work, job: job, plan: plan, verification: verification, isPublishing: isPublishing,
@@ -162,11 +157,35 @@ private struct ComposerFlow: View {
                     )
                 }
             } else {
+                inputSurface
+            }
+        }
+    }
+
+    private var conversationContinueAction: (() -> Void)? {
+        guard (isEditingVersion || job?.stage.isTerminal == true) && !isPublishing else { return nil }
+        return {
+            isConversationPresented = false
+            if !isEditingVersion { restart() }
+            promptFocusRequest += 1
+        }
+    }
+
+    private var previewReturnAction: (() -> Void)? {
+        guard editingBaseJob != nil else { return nil }
+        return { returnToPreview() }
+    }
+
+    private var inputSurface: some View {
                 InputSurface(
-                    parent: parent, isRemix: draftParentWorkID != nil, prompt: $prompt, pickerItems: $pickerItems, assets: assets,
+                    parent: parent, isRemix: draftParentWorkID != nil, isEditingVersion: isEditingVersion, prompt: $prompt, pickerItems: $pickerItems, assets: assets,
+                    creationContext: $creationContext, hasConversation: work != nil,
+                    showConversation: { isConversationPresented = true },
+                    returnToPreview: previewReturnAction,
                     isImporting: isImporting, isSubmitting: isSubmitting, activeUpload: activeAssetUpload, errorMessage: errorMessage,
                     promptFocusRequest: promptFocusRequest,
                     canAddPrivateAssets: session.canPerformMemberActions,
+                    materialUploadsAvailable: generationCapabilities?.materialUploads == true,
                     generationAvailability: generationAvailability,
                     retryGenerationAvailability: { Task { await loadGenerationCapabilities() } },
                     browseLibrary: { requestAuthenticationForAssets { isResourceLibraryPresented = true } },
@@ -175,20 +194,45 @@ private struct ComposerFlow: View {
                     cancelUpload: cancelActiveUpload, retryUpload: retryLastAssetUpload,
                     removeAsset: { id in assets.removeAll { $0.id == id } }, submit: submit
                 )
-            }
-        }
+    }
+
+    var body: some View {
+        content
+        .environment(\.creationSurfaceVisible, creationVisible && !isPlanPresented && !requiresAuthentication && !isResourceLibraryPresented)
         .background(Color.black.ignoresSafeArea())
         .foregroundStyle(.white)
+        .toolbar {
+            if work != nil {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Conversation", systemImage: "bubble.left.and.bubble.right") { isConversationPresented = true }
+                        .accessibilityIdentifier("creation.conversation")
+                }
+            }
+            if job?.stage.isTerminal == true, !isPublishing, !isEditingVersion {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("New creation", systemImage: "plus", action: startNewCreation)
+                        .accessibilityIdentifier("creation.new")
+                }
+            }
+        }
+        .onChange(of: job) { _, updated in model.activeCreationJob = updated }
         .onChange(of: pickerItems) { _, items in startPhotoImport(items) }
         .onChange(of: prompt) { _, _ in persistDraftIfNeeded() }
         .onChange(of: assets.map(\.id)) { _, _ in persistDraftIfNeeded() }
+        .onChange(of: creationContext) { _, _ in persistDraftIfNeeded() }
         .onChange(of: session.user?.id) { oldUserID, newUserID in
             // A creation prompt must not be displayed after a member signs out
             // or changes accounts. The anonymous intent is kept only through
             // the authentication sheet that originated in this composer.
             guard oldUserID != newUserID, pendingCreationIntent == nil else { return }
             prompt = ""
+            model.activeCreationJob = nil
             assets = []
+            creationContext = CreationContext()
+            editingBaseJob = nil
+            isConversationPresented = false
+            work = nil
+            job = nil
             activeDraft = nil
             activeAssetUpload = nil
             retryCandidate = nil
@@ -220,6 +264,14 @@ private struct ComposerFlow: View {
             ])
         }
         .sheet(isPresented: $isPlanPresented) { if let plan { PlanSummaryView(plan: plan) } }
+        .sheet(isPresented: $isConversationPresented) {
+            if let work {
+                CreationConversationSheet(
+                    work: work, currentJob: job ?? editingBaseJob,
+                    continueEditing: conversationContinueAction
+                )
+            }
+        }
         .sheet(isPresented: $requiresAuthentication) {
             AuthenticationRequiredView(
                 title: draftParentWorkID == nil ? "Sign in to create this app" : "Sign in to create this Remix",
@@ -273,7 +325,18 @@ private struct ComposerFlow: View {
             }
         }
         if let resumeWork, let generationID = resumeWork.generationJobID {
+            let pendingDraft = ComposerDraftStore.load(ownerID: draftOwnerID, parentWorkID: draftParentWorkID)
             await restoreGeneration(generationID, failureMessage: "This generation could not be restored. Your existing work is still available in Profile.")
+            if let draft = pendingDraft,
+               draft.workID == resumeWork.id, draft.generationID == nil, job?.stage.isTerminal == true {
+                activeDraft = draft
+                prompt = draft.instruction
+                creationContext = draft.creationContext ?? creationContext
+                await restoreDraftAssets(draft)
+                editingBaseJob = job?.artifactID == nil ? nil : job
+                isEditingVersion = true
+                job = nil
+            }
             return
         }
         guard work == nil, job == nil,
@@ -281,8 +344,20 @@ private struct ComposerFlow: View {
         else { return }
         activeDraft = draft
         prompt = draft.instruction
+        creationContext = draft.creationContext ?? CreationContext()
         await restoreDraftAssets(draft)
-        guard let workID = draft.workID, let generationID = draft.generationID else { return }
+        guard let workID = draft.workID else { return }
+        guard let generationID = draft.generationID else {
+            do {
+                work = try await model.api.fetchWork(id: workID)
+                isEditingVersion = work?.artifactID != nil
+                if let generationID = work?.generationJobID {
+                    editingBaseJob = try? await model.refreshGeneration(generationID)
+                    if editingBaseJob?.artifactID == nil { editingBaseJob = nil }
+                }
+            } catch { errorMessage = "Your saved version could not be loaded. Try again when connected." }
+            return
+        }
         do {
             work = try await model.api.fetchWork(id: workID)
             isRestoring = true
@@ -295,6 +370,7 @@ private struct ComposerFlow: View {
     }
 
     private func restoreDraftAssets(_ draft: ComposerDraft) async {
+        assets = []
         guard !draft.assetIDs.isEmpty else { return }
         do {
             let available = try await model.api.fetchAssetLibrary()
@@ -314,6 +390,18 @@ private struct ComposerFlow: View {
         do {
             let restored = try await model.refreshGeneration(generationID)
             job = restored
+            if activeDraft == nil {
+                creationContext = CreationContext.parse(restored.instruction).context ?? CreationContext()
+                if !restored.assetIDs.isEmpty {
+                    do {
+                        let available = try await model.api.fetchAssetLibrary()
+                        assets = available.filter { restored.assetIDs.contains($0.id) }
+                    } catch {
+                        errorMessage = "Your idea was restored, but materials could not be checked yet. Try again before generating."
+                    }
+                }
+            }
+            work = try await model.api.fetchWork(id: restored.workID)
             if restored.planID != nil { plan = try? await model.plan(for: generationID) }
             if let verificationID = restored.verificationID { verification = try? await model.verification(for: verificationID) }
         } catch {
@@ -336,6 +424,9 @@ private struct ComposerFlow: View {
         } else {
             draft = .fresh(ownerID: draftOwnerID, parentWorkID: draftParentWorkID, instruction: prompt, assetIDs: assets.map(\.id))
         }
+        draft.workID = work?.id ?? draft.workID
+        draft.creationContext = creationContext.selected(for: assets)
+        if isEditingVersion { draft.generationID = nil }
         activeDraft = draft
         do {
             try ComposerDraftStore.save(draft)
@@ -347,6 +438,7 @@ private struct ComposerFlow: View {
 
     private func persistDraftIfNeeded() {
         guard session.canPerformMemberActions else { return }
+        guard !isRestoring, job == nil else { return }
         guard activeDraft != nil || !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !assets.isEmpty else { return }
         _ = persistDraft()
     }
@@ -377,22 +469,31 @@ private struct ComposerFlow: View {
             requiresAuthentication = true
             return
         }
+        guard assets.reduce(0, { $0 + $1.sizeBytes }) <= 4 * 1024 * 1024 else {
+            errorMessage = "Selected media exceed the 4 MB game budget. Remove or compress a file before generating."
+            return
+        }
         isSubmitting = true
         errorMessage = nil
         let draft = persistDraft()
         Task {
             do {
                 let result = try await model.beginGeneration(
+                    existingWork: work,
                     instruction: instruction,
                     parent: parent,
                     parentWorkID: draftParentWorkID,
                     assets: assets,
+                    generationInstruction: creationContext.selected(for: assets).instruction(for: instruction),
+                    baseArtifactID: editingBaseJob?.verificationGrade == .fallback ? nil : editingBaseJob?.artifactID,
                     allowRemix: allowsRemixByDefault,
                     workIdempotencyKey: draft.workIdempotencyKey,
                     generationIdempotencyKey: draft.generationIdempotencyKey
                 )
                 work = result.0
                 job = result.1
+                isEditingVersion = false
+                editingBaseJob = nil
                 telemetry.record(.generationSubmitted, attributes: [
                     "screen_id": "create",
                     "creation_mode": draftParentWorkID == nil ? "original" : "remix"
@@ -677,7 +778,7 @@ private struct ComposerFlow: View {
             if activeAssetUpload?.canRetryVerification == true {
                 errorMessage = "Pulse couldn’t finish checking \(activeAssetUpload?.fileName ?? "this material"). It is still uploaded—try checking it again without uploading it again."
             } else {
-                errorMessage = "Couldn’t upload \(activeAssetUpload?.fileName ?? "this material"). Please check the file and try again."
+                errorMessage = "The transfer could not finish. Keep Pulse open, check your connection, and retry. Your selected file is still available."
             }
         } else {
             errorMessage = error.localizedDescription
@@ -801,6 +902,10 @@ private struct ComposerFlow: View {
         for asset in additions where !assets.contains(where: { $0.id == asset.id }) {
             assets.append(asset)
         }
+        if let upload = activeAssetUpload, additions.contains(where: { $0.id == upload.assetID }) {
+            activeAssetUpload = nil
+            retryCompletionAssetID = nil
+        }
     }
 
     private func requestAuthenticationForCreation() {
@@ -827,7 +932,12 @@ private struct ComposerFlow: View {
                 job = updated
                 if updated.planID != nil, plan == nil { plan = try? await model.plan(for: jobID) }
                 if let verificationID = updated.verificationID, verification == nil { verification = try? await model.verification(for: verificationID) }
-                if updated.stage.isTerminal { return }
+                if updated.stage.isTerminal {
+                    work = try await model.api.fetchWork(id: updated.workID)
+                    errorMessage = nil
+                    return
+                }
+                errorMessage = nil
                 try await Task.sleep(for: .milliseconds(450))
             } catch is CancellationError {
                 return
@@ -838,13 +948,23 @@ private struct ComposerFlow: View {
         }
     }
 
-    private func publish() {
+    private func publish(title: String, summary: String) {
         guard let work, !isPublishing else { return }
         isPublishing = true
+        errorMessage = nil
         Task {
             do {
-                let published = try await model.publish(work.id)
+                let published = try await model.publish(work.id, title: title, summary: summary, artifactID: job?.artifactID)
                 clearDraft()
+                self.work = nil
+                job = nil
+                plan = nil
+                verification = nil
+                prompt = ""
+                assets = []
+                pickerItems = []
+                isEditingVersion = false
+                model.activeCreationJob = nil
                 onPublished(published)
             } catch {
                 errorMessage = error.localizedDescription
@@ -853,13 +973,46 @@ private struct ComposerFlow: View {
         }
     }
 
-    private func restart() {
+    private func startNewCreation() {
+        // The saved server work remains available from Profile. Only the
+        // local composer slot is released for the next idea.
+        clearDraft()
+        prompt = ""
+        assets = []
+        creationContext = CreationContext()
+        editingBaseJob = nil
         work = nil
         job = nil
         plan = nil
         verification = nil
         errorMessage = nil
+        isEditingVersion = false
+        model.activeCreationJob = nil
+    }
+
+    private func restart() {
+        // Keep the Work and its last successful Artifact. A new request creates
+        // a candidate for this same work rather than a disconnected work.
+        if job?.verificationGrade == .fallback {
+            prompt = CreationContext.parse(job?.instruction ?? prompt).message
+            work = nil
+        }
+        let hasUnsentMessage = editingBaseJob?.id == job?.id
+        editingBaseJob = job?.artifactID == nil ? nil : job
+        isEditingVersion = work?.artifactID != nil
+        if isEditingVersion && !hasUnsentMessage { prompt = "" }
+        job = nil
+        plan = nil
+        verification = nil
+        errorMessage = nil
         _ = persistDraft(resetOperation: true)
+    }
+
+    private func returnToPreview() {
+        guard let editingBaseJob else { return }
+        _ = persistDraft()
+        job = editingBaseJob
+        isEditingVersion = false
     }
 
     private func cancelGeneration() {
@@ -917,15 +1070,21 @@ private struct ComposerFlow: View {
 private struct InputSurface: View {
     let parent: InteractiveApp?
     let isRemix: Bool
+    let isEditingVersion: Bool
     @Binding var prompt: String
     @Binding var pickerItems: [PhotosPickerItem]
     let assets: [GenerationAsset]
+    @Binding var creationContext: CreationContext
+    let hasConversation: Bool
+    let showConversation: () -> Void
+    let returnToPreview: (() -> Void)?
     let isImporting: Bool
     let isSubmitting: Bool
     let activeUpload: ComposerAssetUpload?
     let errorMessage: String?
     let promptFocusRequest: Int
     let canAddPrivateAssets: Bool
+    let materialUploadsAvailable: Bool
     let generationAvailability: GenerationAvailability
     let retryGenerationAvailability: () -> Void
     let browseLibrary: () -> Void
@@ -940,7 +1099,12 @@ private struct InputSurface: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                if let parent {
+                if isEditingVersion {
+                    Label("Refine this version", systemImage: "wand.and.stars")
+                        .font(.title2.bold())
+                    Text("Describe the changes. Your current game and its materials will be the starting point.")
+                        .foregroundStyle(.secondary)
+                } else if let parent {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("REMIX OF").font(.caption2.weight(.bold)).foregroundStyle(Color.pulseViolet)
                         Text(parent.title).font(.title2.bold())
@@ -964,17 +1128,36 @@ private struct InputSurface: View {
                     }
                 }
 
+                if hasConversation {
+                    HStack {
+                        Button("Review conversation", systemImage: "bubble.left.and.bubble.right", action: showConversation)
+                        Spacer()
+                        if let returnToPreview {
+                            Button("Back to preview", action: returnToPreview)
+                                .accessibilityIdentifier("creation.back-to-preview")
+                        }
+                    }.font(.subheadline).tint(.pulseLime)
+                }
+                Text("Create, play, then ask for another change. Each message creates a new version of this work.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if isRemix || isEditingVersion {
+                    Label("Existing game and embedded media are inherited. Add materials below only when you need something new.", systemImage: "square.on.square")
+                        .font(.caption).foregroundStyle(Color.pulseViolet)
+                        .accessibilityIdentifier("creation.inherited-materials")
+                }
+
                 VStack(alignment: .leading, spacing: 9) {
-                    Text(isRemix ? "What should change?" : "Your idea").font(.headline)
+                    Text(isEditingVersion || isRemix ? "What should change?" : "Your idea").font(.headline)
                     ZStack(alignment: .topLeading) {
                         if prompt.isEmpty {
-                            Text(isRemix ? "For example: make the pace slower and the colors warmer" : "For example: make a tiny garden that reacts to each touch")
+                            Text(isEditingVersion || isRemix ? "For example: make the pace slower and the colors warmer" : "For example: make a tiny garden that reacts to each touch")
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 17).padding(.vertical, 20)
                                 .allowsHitTesting(false)
                         }
                         TextEditor(text: $prompt)
-                            .scrollContentBackground(.hidden).frame(minHeight: 120).padding(12)
+                            .scrollContentBackground(.hidden).frame(height: 144).padding(12)
+                            .autocorrectionDisabled().textInputAutocapitalization(.never)
                             .focused($isPromptFocused)
                             .accessibilityLabel(isRemix ? "Describe what should change in this Remix" : "Describe the interactive app you want to create")
                             .accessibilityHint("A single sentence is enough. Images, video, and BGM are optional.")
@@ -984,11 +1167,21 @@ private struct InputSurface: View {
                     .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.12)))
                 }
 
+                if isRemix || isEditingVersion {
+                    DisclosureGroup("What should stay the same?") {
+                        TextField("For example: keep the controls, scoring and cat image", text: $creationContext.preserve, axis: .vertical)
+                            .lineLimit(2...4)
+                            .accessibilityIdentifier("creation.preserve")
+                        Text("These instructions stay with the next rounds until you change them.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }.tint(.pulseLime)
+                }
+
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         Text("Resource library").font(.headline)
                         Spacer()
-                        Text("\(assets.count)/8 · Optional").font(.caption).foregroundStyle(.secondary)
+                        Text("\(assets.count)/8 · Added here").font(.caption).foregroundStyle(.secondary)
                     }
                     HStack(alignment: .top, spacing: 9) {
                         ResourceActionButton(title: "Library", symbol: "square.grid.2x2", prominent: true, action: browseLibrary)
@@ -1014,7 +1207,7 @@ private struct InputSurface: View {
                             }
                             .buttonStyle(.plain)
                             .frame(maxWidth: .infinity)
-                            .disabled(isImporting || isSubmitting || assets.count >= 8)
+                            .disabled(isImporting || isSubmitting || assets.count >= 8 || !materialUploadsAvailable)
                             .accessibilityLabel(isImporting ? "Preparing resources" : "Upload private images or videos")
                             .accessibilityIdentifier("creation.upload-media")
                         } else {
@@ -1029,25 +1222,31 @@ private struct InputSurface: View {
                             symbol: canAddPrivateAssets ? "music.note.list" : "person.crop.circle.badge.plus",
                             action: importBGM
                         )
-                        .disabled(isImporting || isSubmitting || assets.count >= 8)
+                        .disabled(isImporting || isSubmitting || assets.count >= 8 || !materialUploadsAvailable)
                         .accessibilityLabel(canAddPrivateAssets ? "Upload private BGM" : "Sign in to upload private BGM")
                         .accessibilityIdentifier("creation.upload-bgm")
+                    }
+                    if !materialUploadsAvailable {
+                        Text("Material uploads are unavailable. You can create with text while storage is being configured.")
+                            .font(.caption).foregroundStyle(Color.pulseCoral)
                     }
                     if let activeUpload {
                         AssetUploadStatusView(upload: activeUpload, cancel: cancelUpload, retry: retryUpload)
                     }
+                    if !assets.isEmpty {
+                        Text("Media budget: \(ByteCountFormatter.string(fromByteCount: Int64(assets.reduce(0) { $0 + $1.sizeBytes }), countStyle: .file)) / 4 MB")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     ForEach(assets) { asset in
-                        HStack(spacing: 12) {
-                            Image(systemName: asset.iconName).foregroundStyle(Color.pulseViolet)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(asset.displayName).font(.subheadline.weight(.semibold))
-                                Text(asset.library == .public ? "Official public resource" : "Your private resource").font(.caption2).foregroundStyle(asset.library == .public ? Color.pulseLime : .secondary)
-                                Text(asset.summary ?? "Ready for generation").font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                            }
-                            Spacer()
-                            Button { removeAsset(asset.id) } label: { Image(systemName: "xmark.circle.fill") }
-                                .foregroundStyle(.secondary).accessibilityLabel("Remove \(asset.displayName)")
-                        }.padding(12).background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
+                        MaterialDirectionCard(asset: asset, context: $creationContext, remove: { removeAsset(asset.id) })
+                    }
+                    if !assets.isEmpty {
+                        Text("Choose how each file should appear. After generation, play the event you described to check the result.")
+                            .font(.caption).foregroundStyle(.secondary)
+                        if isEditingVersion || isRemix {
+                            Text("Removing a file here stops attaching it again. To remove media already in the game, ask for that change in your message.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                 }
 
@@ -1057,11 +1256,16 @@ private struct InputSurface: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+            }.padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 28)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 8) {
                 GenerationAvailabilityRow(availability: generationAvailability, retry: retryGenerationAvailability)
                 Button(action: submit) {
                     HStack {
                         if isSubmitting { ProgressView().tint(.black) }
-                        Text(canAddPrivateAssets ? (isRemix ? "Create Remix with AI" : "Generate with AI") : (isRemix ? "Sign in to create Remix" : "Sign in to generate"))
+                        Text(canAddPrivateAssets ? (isEditingVersion ? "Apply changes" : (isRemix ? "Create Remix with AI" : "Generate with AI")) : (isRemix ? "Sign in to create Remix" : "Sign in to generate"))
                             .fontWeight(.bold)
                     }
                         .frame(maxWidth: .infinity).padding(.vertical, 15)
@@ -1069,7 +1273,7 @@ private struct InputSurface: View {
                 .buttonStyle(.borderedProminent).tint(.pulseLime).foregroundStyle(.black)
                 .disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmitting || isImporting || !generationAvailability.canGenerate)
                 .accessibilityIdentifier("creation.generate")
-            }.padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 28)
+            }.padding(.horizontal,20).padding(.vertical,10).background(Color.black)
         }
         .onChange(of: promptFocusRequest) { _, _ in
             isPromptFocused = true
@@ -1390,8 +1594,10 @@ private struct ProgressSurface: View {
             .accessibilityHint(reduceMotion ? "Progress animation is paused because Reduce Motion is enabled." : "Visual progress indicator.")
             VStack(alignment: .leading, spacing: 8) {
                 Text(job.stage.productTitle).font(.title.weight(.bold))
-                Text(job.statusMessage).foregroundStyle(.secondary)
-                Text(work.prompt).font(.subheadline).foregroundStyle(Color.pulseLime).lineLimit(2)
+                TimelineView(.periodic(from: job.createdAt, by: 1)) { context in
+                    Text("Elapsed: \(Int(context.date.timeIntervalSince(job.createdAt))) seconds").font(.caption).foregroundStyle(.secondary)
+                }
+                Text(CreationContext.parse(job.instruction).message).font(.subheadline).foregroundStyle(Color.pulseLime).lineLimit(2)
             }
             VStack(spacing: 0) {
                 ForEach(visibleStages, id: \.self) { stage in
@@ -1448,7 +1654,7 @@ private struct TerminalSurface: View {
     let verification: VerificationReport?
     let isPublishing: Bool
     let publishingError: String?
-    let publish: () -> Void
+    let publish: (String, String) -> Void
     let showPlan: () -> Void
     let restart: () -> Void
     let retryGeneration: () -> Void
@@ -1460,7 +1666,7 @@ private struct TerminalSurface: View {
         case .succeeded, .fallbackReady:
             PreviewSurface(
                 work: work, job: job, plan: plan, verification: verification, isPublishing: isPublishing,
-                publishingError: publishingError, publish: publish, showPlan: showPlan,
+                publishingError: publishingError, publish: publish, showPlan: showPlan, edit: restart,
                 interactionViewportHeight: interactionViewportHeight
             )
         case .failed, .cancelled:
@@ -1499,11 +1705,11 @@ private struct FailureSurface: View {
                 .font(.title.weight(.bold))
             Text(presentation.detail)
                 .foregroundStyle(.secondary)
-            if job.retryable {
+            if job.retryable && presentation != .materialsUnavailable {
                 Text("This issue may be temporary. Starting again creates a new generation with your saved idea.")
                     .font(.footnote).foregroundStyle(Color.pulseViolet)
             }
-            if job.stage == .cancelled || job.retryable {
+            if job.stage == .cancelled || (job.retryable && presentation != .materialsUnavailable) {
                 Button(action: retryGeneration) {
                     HStack {
                         if isRetryingGeneration { ProgressView().tint(.black) }
@@ -1545,106 +1751,123 @@ private struct PreviewSurface: View {
     let verification: VerificationReport?
     let isPublishing: Bool
     let publishingError: String?
-    let publish: () -> Void
+    let publish: (String, String) -> Void
     let showPlan: () -> Void
+    let edit: () -> Void
+    @Environment(\.creationSurfaceVisible) private var isSurfaceVisible
+    @State private var areChecksExpanded = false
+    @State private var publicationTitle = ""
+    @State private var publicationSummary = ""
     let interactionViewportHeight: CGFloat
     @State private var touch = CGPoint(x: 0.5, y: 0.55)
 
     var body: some View {
         GeometryReader { viewport in
-            let viewportHeightIncludingTopSafeArea = max(
-                interactionViewportHeight,
-                viewport.size.height + viewport.frame(in: .global).minY
-            )
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(job.verificationGrade == .fallback ? "A preview version is ready" : "Your interactive app is ready")
-                        .font(.title.weight(.bold))
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(job.verificationGrade == .verified ? "Your interactive app is ready" : (job.verificationGrade == .fallback ? "Your app was not created" : "Your game is saved · changes needed"))
+                        .font(.title2.bold())
                         .padding(.horizontal, 20)
-                        .padding(.top, 12)
-                        .padding(.bottom, 10)
-                    GeometryReader { proxy in
-                        if let artifactID = job.artifactID {
-                            ArtifactPlayerView(
-                                url: model.artifactURL(for: artifactID),
-                                isActive: PulseAccessibility.runtimeIsActive(
-                                    isVisible: true,
-                                    isApplicationActive: scenePhase == .active,
-                                    isSystemRuntimeAvailable: runtimeLifecycle.allowsRuntime
-                                ),
-                                title: work.title,
-                                interactionSummary: work.theme,
-                                accessibilityIdentifier: "generation.artifact.player",
-                                telemetryScreen: "generation_preview"
-                            )
-                            .frame(width: proxy.size.width, height: proxy.size.height)
-                            .clipped()
-                        } else {
-                            LivingCanvas(
-                                app: work,
-                                touchPoint: $touch,
-                                isActive: PulseAccessibility.runtimeIsActive(
-                                    isVisible: true,
-                                    isApplicationActive: scenePhase == .active,
-                                    isSystemRuntimeAvailable: runtimeLifecycle.allowsRuntime
-                                )
-                            )
-                                .gesture(DragGesture(minimumDistance: 0).onChanged { value in touch = CGPoint(x: value.location.x / proxy.size.width, y: value.location.y / proxy.size.height) })
-                                .accessibilityIdentifier("generation.preview.canvas")
-                                .accessibilityValue("touch-x-\(Int(touch.x * 100))-y-\(Int(touch.y * 100))")
-                                .frame(width: proxy.size.width, height: proxy.size.height)
-                                .clipped()
+                    if let artifactID = job.artifactID, job.verificationGrade != .fallback {
+                        ArtifactPlayerView(
+                            url: model.artifactURL(for: artifactID),
+                            isActive: PulseAccessibility.runtimeIsActive(
+                                isVisible: isSurfaceVisible,
+                                isApplicationActive: scenePhase == .active,
+                                isSystemRuntimeAvailable: runtimeLifecycle.allowsRuntime
+                            ),
+                            title: work.title,
+                            interactionSummary: work.theme,
+                            accessibilityIdentifier: "generation.artifact.player",
+                            telemetryScreen: "generation_preview"
+                        )
+                        .frame(width: viewport.size.width,
+                               height: min(InteractiveSurfaceLayout.interactionHeight(in: interactionViewportHeight),
+                                           max(320, viewport.size.height - 172)))
+                        .clipped()
+                    }
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label(job.verificationGrade == .verified ? "Ready to share" : (job.verificationGrade == .fallback ? "Recovery screen only · not your requested app" : "Play privately, then fix the failed checks"),
+                              systemImage: job.verificationGrade == .verified ? "checkmark.circle.fill" : "wand.and.stars")
+                            .foregroundStyle(Color.pulseLime)
+                        if let context = CreationContext.parse(job.instruction).context, !context.materials.isEmpty {
+                            DisclosureGroup("Check materials in your preview") {
+                                Text("These are your requested uses, not a visual verification result. Play each trigger, then ask for changes if a material is missing or gets in the way.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                ForEach(context.materials) { material in
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(material.name).font(.subheadline.bold())
+                                        Text(LocalizedStringKey(material.role.title)).font(.caption)
+                                        if !material.placement.isEmpty { Text(material.placement).font(.caption) }
+                                    }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 4)
+                                }
+                            }.tint(.pulseLime)
                         }
-                    }
-                    .frame(
-                        width: viewport.size.width,
-                        height: InteractiveSurfaceLayout.interactionHeight(in: viewportHeightIncludingTopSafeArea)
-                    )
-
-                    VStack(alignment: .leading, spacing: 14) {
-                    HStack {
-                        Label(job.verificationGrade.rawValue.capitalized, systemImage: job.verificationGrade == .fallback ? "shield.lefthalf.filled" : "checkmark.seal.fill")
-                            .foregroundStyle(job.verificationGrade == .fallback ? Color.pulseViolet : Color.pulseLime)
-                        Spacer()
-                        if let verification { Text("Score \(Int(verification.score.rounded()))").font(.caption).foregroundStyle(.secondary) }
-                        else { Text("Verification summary unavailable").font(.caption).foregroundStyle(Color.pulseCoral) }
-                    }
-                    Text(verification?.summary ?? (job.verificationGrade == .fallback ? "The standard version did not pass every gate. This simplified version is available for review." : "This version is ready for review. The detailed verification summary could not be loaded."))
-                        .font(.subheadline).foregroundStyle(.secondary)
-                    if let verification {
-                        ForEach(verification.checks.filter(\.hardGate)) { check in
-                            Label(check.summary, systemImage: check.status == "passed" ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                                .font(.caption).foregroundStyle(check.status == "passed" ? Color.pulseLime : Color.pulseCoral)
+                        DisclosureGroup("Title and description") {
+                            TextField("Title", text: $publicationTitle)
+                                .textFieldStyle(.roundedBorder).accessibilityIdentifier("generation.title")
+                            TextField("How to play", text: $publicationSummary, axis: .vertical)
+                                .textFieldStyle(.roundedBorder).accessibilityIdentifier("generation.summary")
+                            Text("Selected media will be included in the published app and available to permitted Remixes.")
+                                .font(.caption).foregroundStyle(.secondary)
                         }
-                    }
-                    if plan != nil { Button(action: showPlan) { Label("Review plan and acceptance cases", systemImage: "doc.text") }.buttonStyle(.bordered) }
-                    if canPublish {
-                        Button(action: publish) {
-                            HStack { if isPublishing { ProgressView().tint(.black) }; Text("Publish to Pulse").fontWeight(.bold) }
-                                .frame(maxWidth: .infinity).padding(.vertical, 15)
-                        }.buttonStyle(.borderedProminent).tint(.pulseLime).foregroundStyle(.black).disabled(isPublishing)
+                        DisclosureGroup("Automatic check details", isExpanded: $areChecksExpanded) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text(verification?.summary ?? "Check details are temporarily unavailable.")
+                                if let verification {
+                                    ForEach(verification.checks.filter(\.hardGate)) { check in
+                                        Label(check.summary, systemImage: check.status == "passed" ? "checkmark.circle" : "exclamationmark.triangle")
+                                    }
+                                }
+                                if plan != nil {
+                                    Button("Review plan and acceptance cases", action: showPlan)
+                                }
+                            }.font(.caption).foregroundStyle(.secondary).padding(.top, 8)
+                        }
+                        if !canPublish { publishingGateNotice }
+                        if let publishingError {
+                            Label(publishingError, systemImage: "exclamationmark.triangle.fill")
+                                .font(.footnote).foregroundStyle(Color.pulseCoral)
+                        }
+                    }.padding(.horizontal, 20).padding(.bottom, 20)
+                }.padding(.top, 12)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                VStack(spacing: 8) {
+                    HStack(spacing: 12) {
+                        Button(action: edit) {
+                            Label(job.verificationGrade == .fallback ? "Revise idea and start again" : "Keep editing", systemImage: "wand.and.stars")
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.bordered).tint(.pulseViolet)
+                        .disabled(isPublishing || (work.status != .draft && work.status != .published))
+                        .accessibilityIdentifier("generation.edit")
+                        if canPublish {
+                            Button { publish(publicationTitle, publicationSummary) } label: {
+                                HStack {
+                                    if isPublishing { ProgressView().tint(.black) }
+                                    Text("Publish to Pulse").fontWeight(.bold)
+                                }.frame(maxWidth: .infinity, minHeight: 44)
+                            }
+                            .buttonStyle(.borderedProminent).tint(.pulseLime).foregroundStyle(.black)
+                            .disabled(isPublishing || publicationTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || publicationSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || publicationTitle.count > 120 || publicationSummary.count > 120)
                             .accessibilityIdentifier("generation.publish")
-                        Label("Publishes immediately. Pulse may remove content that violates the community guidelines after review.", systemImage: "checkmark.shield")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                        }
+                    }
+                    if canPublish {
+                        Text("Publishes immediately. Content may be removed after review.")
+                            .font(.caption2).foregroundStyle(.secondary)
                             .accessibilityIdentifier("generation.publish-moderation-notice")
-                    } else {
-                        publishingGateNotice
                     }
-                    if let publishingError {
-                        Label(publishingError, systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote)
-                            .foregroundStyle(Color.pulseCoral)
-                            .accessibilityLabel(publishingError)
-                    }
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 16)
-                    .padding(.bottom, 28)
                 }
+                .padding(.horizontal, 16).padding(.vertical, 10)
+                .background(.black)
             }
         }
-        .toolbar(.hidden, for: .navigationBar)
+        .onAppear {
+            if publicationTitle.isEmpty { publicationTitle = work.title }
+            if publicationSummary.isEmpty { publicationSummary = work.theme }
+        }
     }
 
     private var publishingGateNotice: some View {
@@ -1673,6 +1896,7 @@ private struct PreviewSurface: View {
     }
 
     private var publishingGateMessage: String {
+        if work.status == .published { return "This version is live. Keep editing to prepare a new version while this one stays available." }
         if job.verificationGrade != .verified {
             return "This preview is not eligible for public release. Only independently verified builds can be published."
         }
@@ -1696,11 +1920,24 @@ private struct PlanSummaryView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Objective") { Text(plan.objective) }
+                Section("Objective") { Text(CreationContext.parse(plan.objective).message) }
+                if let context = CreationContext.parse(plan.objective).context, !context.materials.isEmpty {
+                    Section("Material direction") {
+                        ForEach(context.materials) { material in
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(material.name).font(.headline)
+                                Text(LocalizedStringKey(material.role.title))
+                                if !material.placement.isEmpty { Text(material.placement).foregroundStyle(.secondary) }
+                            }
+                        }
+                    }
+                }
                 Section("Screens") { ForEach(plan.screens) { screen in VStack(alignment: .leading) { Text(screen.id.capitalized).font(.headline); Text(screen.purpose).foregroundStyle(.secondary) } } }
                 Section("Core interactions") { ForEach(plan.interactions) { interaction in VStack(alignment: .leading) { Text(interaction.trigger.capitalized).font(.headline); Text(interaction.effect).foregroundStyle(.secondary) } } }
-                Section("Acceptance") { ForEach(plan.acceptanceCases) { item in VStack(alignment: .leading) { Text("\(item.priority) · \(item.action)").font(.headline); Text(item.assert).foregroundStyle(.secondary) } } }
-                Section("Constraints") { ForEach(plan.constraints, id: \.self) { Label($0, systemImage: "lock.shield") } }
+                DisclosureGroup("Technical acceptance details") {
+                    ForEach(plan.acceptanceCases) { item in VStack(alignment: .leading) { Text("\(item.priority) · \(item.action)").font(.headline); Text(item.assert).foregroundStyle(.secondary) } }
+                    ForEach(plan.constraints, id: \.self) { Label($0, systemImage: "lock.shield") }
+                }
             }.navigationTitle(plan.title).toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
         }
     }

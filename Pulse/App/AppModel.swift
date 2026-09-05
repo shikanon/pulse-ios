@@ -22,7 +22,9 @@ final class AppModel {
     private var nextCommentCursors: [UUID: String] = [:]
     private var loadingMoreCommentIDs: Set<UUID> = []
     var profileError: String?
+    var feedFocusID: UUID?
     var pendingRemixSource: InteractiveApp?
+    var activeCreationJob: GenerationJob?
     var pendingGenerationRecovery: InteractiveApp?
     var sharedWork: InteractiveApp?
     var reportTarget: WorkReportTarget?
@@ -258,25 +260,34 @@ final class AppModel {
     }
 
     func beginGeneration(
+        existingWork: InteractiveApp? = nil,
         instruction: String,
         parent: InteractiveApp?,
         parentWorkID: UUID? = nil,
         assets: [GenerationAsset],
+        generationInstruction: String? = nil,
+        baseArtifactID: UUID? = nil,
         allowRemix: Bool = CreationPreferences.defaultAllowRemix,
         workIdempotencyKey: String,
         generationIdempotencyKey: String
     ) async throws -> (InteractiveApp, GenerationJob) {
-        let work = try await api.createWork(
-            instruction: instruction,
-            parent: parent,
-            parentWorkID: parentWorkID,
-            allowRemix: allowRemix,
-            idempotencyKey: workIdempotencyKey
-        )
+        let work: InteractiveApp
+        if let existingWork {
+            work = existingWork
+        } else {
+            work = try await api.createWork(
+                instruction: instruction,
+                parent: parent,
+                parentWorkID: parentWorkID,
+                allowRemix: allowRemix,
+                idempotencyKey: workIdempotencyKey
+            )
+        }
         let generation = try await api.startGeneration(
             workID: work.id,
-            instruction: instruction,
+            instruction: generationInstruction ?? instruction,
             assetIDs: assets.map(\.id),
+            baseArtifactID: baseArtifactID ?? existingWork?.artifactID,
             idempotencyKey: generationIdempotencyKey
         )
         replace(work)
@@ -402,11 +413,13 @@ final class AppModel {
         throw PulseAPIError(serverCode: "not_found", statusCode: 404)
     }
 
-    func publish(_ workID: UUID) async throws -> InteractiveApp {
-        let work = try await api.publish(workID: workID)
+    func publish(_ workID: UUID, title: String? = nil, summary: String? = nil, artifactID: UUID? = nil) async throws -> InteractiveApp {
+        let work = try await api.publish(workID: workID, title: title, summary: summary, artifactID: artifactID)
         replace(work)
         await loadFeed()
         await loadMyWorks()
+        if !feed.contains(where: { $0.id == work.id }) { feed.insert(work, at: 0) }
+        feedFocusID = work.id
         return work
     }
 
@@ -513,6 +526,13 @@ final class AppModel {
         }
     }
 
+    func startRemix(_ work: InteractiveApp) {
+        guard work.allowRemix else { return }
+        pendingGenerationRecovery = nil
+        sharedWork = nil
+        pendingRemixSource = work
+    }
+
     func clearPendingRemix() {
         pendingRemixSource = nil
         deepLinkUnavailable = nil
@@ -532,6 +552,7 @@ final class AppModel {
     }
 
     func recoverGeneration(for work: InteractiveApp) {
+        pendingRemixSource = nil
         pendingGenerationRecovery = work
     }
 
@@ -552,7 +573,7 @@ final class AppModel {
     }
 
     private func replace(_ work: InteractiveApp) {
-        if let index = feed.firstIndex(where: { $0.id == work.id }) { feed[index] = work }
+        if work.status == .published, let index = feed.firstIndex(where: { $0.id == work.id }) { feed[index] = work }
         if let index = myWorks.firstIndex(where: { $0.id == work.id }) { myWorks[index] = work }
         else if work.creator == creatorName { myWorks.insert(work, at: 0) }
     }

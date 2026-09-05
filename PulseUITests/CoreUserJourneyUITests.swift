@@ -99,8 +99,8 @@ final class CoreUserJourneyUITests: XCTestCase {
         XCTAssertTrue(resultScroll.waitForExistence(timeout: 5), "The generated result did not expose its own scroll container")
         XCTAssertGreaterThanOrEqual(
             player.frame.height,
-            resultScroll.frame.height - 132,
-            "The generated player did not use Home’s shared interaction-height budget"
+            320,
+            "The generated preview became too small to play"
         )
         let start = player.buttons["START"]
         XCTAssertTrue(start.waitForExistence(timeout: 10), "The generated result was a placeholder instead of a playable snake game")
@@ -188,6 +188,11 @@ final class CoreUserJourneyUITests: XCTestCase {
         XCTAssertTrue(create.waitForExistence(timeout: 12), "The primary Create entry did not render")
         create.tap()
 
+        // An earlier journey deliberately leaves a private, playable draft.
+        // Exercise the real new-creation action without disabling persistence.
+        let newCreation = app.buttons["creation.new"]
+        if newCreation.waitForExistence(timeout: 3) { newCreation.tap() }
+
         let promptEditor = app.textViews["creation.prompt"]
         XCTAssertTrue(promptEditor.waitForExistence(timeout: 5), "The one-sentence editor did not render")
         assertCompactResourceActions(in: app)
@@ -247,7 +252,6 @@ final class CoreUserJourneyUITests: XCTestCase {
             .completed,
             "Publishing did not return to the Feed"
         )
-        homeTab.tap()
         XCTAssertTrue(app.staticTexts["@\(testAccount)"].waitForExistence(timeout: 15), "Publishing did not return to the new live Feed card")
         let publishedPlayer = activeFeedInteraction(in: app).webViews["published.artifact.player"]
         XCTAssertTrue(publishedPlayer.waitForExistence(timeout: 15), "The published Artifact did not load back in the Feed")
@@ -261,6 +265,100 @@ final class CoreUserJourneyUITests: XCTestCase {
 
         assertHealthyForeground(app)
         attachScreenshot(named: "core-generate-publish-play", app: app)
+        app.buttons["app.tab.create"].tap()
+        XCTAssertTrue(app.textViews["creation.prompt"].waitForExistence(timeout: 5), "Create stayed on the published preview")
+        XCTAssertFalse(app.buttons["generation.publish"].exists, "Published result still offered publication")
+    }
+
+    func testRemixRefinementKeepsOneWorkAndPublishesToFocusedFeed() async throws {
+        let fixture = try await createPublishedGeneratedWork(title: "Remix snake", instruction: "snake game", owner: fixtureCreator)
+        let app = launchApp()
+        XCTAssertTrue(app.staticTexts[fixture.theme].waitForExistence(timeout: 12))
+        activeFeedSummary(in: app).buttons["Remix this work"].tap()
+        let editor = app.textViews["creation.prompt"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        XCTAssertEqual(editor.value as? String, "", "Remix prefilled an unrequested change")
+        editor.tap()
+        editor.typeText("Make the snake blue")
+        app.buttons["creation.generate"].tap()
+        let edit = app.buttons["generation.edit"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 45))
+        XCTAssertTrue(app.webViews["generation.artifact.player"].buttons["START"].waitForExistence(timeout: 10), "Remix lost the source gameplay")
+        XCTAssertTrue(edit.isHittable, "Edit must be visible without scrolling past check details")
+        let publish = app.buttons["generation.publish"]
+        XCTAssertTrue(publish.isHittable, "Publish must be visible without scrolling")
+        attachScreenshot(named: "creator-remix-preview-actions", app: app)
+        edit.tap()
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        XCTAssertEqual(editor.value as? String, "")
+        editor.tap()
+        editor.typeText("Keep the game and make the buttons blue")
+        app.buttons["creation.back-to-preview"].tap()
+        XCTAssertTrue(edit.waitForExistence(timeout: 8))
+        edit.tap()
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        XCTAssertEqual(editor.value as? String, "Keep the game and make the buttons blue", "Returning to preview lost the unsent message")
+        app.buttons["creation.generate"].tap()
+        XCTAssertTrue(edit.waitForExistence(timeout: 45))
+        app.buttons["creation.conversation"].tap()
+        XCTAssertTrue(app.navigationBars["Conversation"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Make the snake blue"].waitForExistence(timeout: 8), "Conversation lost the first request")
+        XCTAssertTrue(app.staticTexts["Keep the game and make the buttons blue"].waitForExistence(timeout: 8), "Conversation lost the follow-up")
+        attachScreenshot(named: "creator-multi-turn-conversation", app: app)
+        app.buttons["Done"].tap()
+        let payload = try await requestJSON(path: "me/works", user: testAccount, expectedStatus: 200)
+        let works = try XCTUnwrap(payload["data"] as? [[String: Any]])
+        let remixes = works.filter { $0["parentId"] as? String == fixture.id }
+        XCTAssertEqual(remixes.count, 1, "Refining created another disconnected Work")
+        let id = try XCTUnwrap(remixes.first?["id"] as? String)
+        let history = try await requestJSON(path: "works/\(id)/versions", user: testAccount, expectedStatus: 200)
+        XCTAssertEqual((history["data"] as? [Any])?.count, 2, "Refinement did not create a second version")
+        publish.tap()
+        XCTAssertTrue(app.buttons["app.tab.home"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["@\(testAccount)"].waitForExistence(timeout: 10))
+        XCTAssertTrue(activeFeedInteraction(in: app).webViews["published.artifact.player"].buttons["START"].waitForExistence(timeout: 10))
+    }
+
+    func testPublishedWorkConversationKeepsLatestPrivateCandidate() async throws {
+        let fixture = try await createPublishedGeneratedWork(title: "Published conversation", instruction: "snake game", owner: testAccount)
+        let app = launchApp()
+        app.buttons["app.tab.profile"].tap()
+        let details = app.buttons["profile.work-details.\(fixture.id)"]
+        XCTAssertTrue(details.waitForExistence(timeout: 10))
+        details.tap()
+        XCTAssertTrue(app.navigationBars["Work details"].waitForExistence(timeout: 8))
+        let editVersion = app.buttons["Edit a new version"]
+        for _ in 0..<8 where !editVersion.isHittable {
+            app.scrollViews.firstMatch.swipeUp()
+        }
+        attachScreenshot(named: "published-conversation-edit-entry", app: app)
+        XCTAssertTrue(editVersion.waitForExistence(timeout: 8))
+        editVersion.tap()
+        let edit = app.buttons["generation.edit"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 12))
+        edit.tap()
+        let editor = app.textViews["creation.prompt"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        XCTAssertEqual(editor.value as? String, "", "Restoring a work invented an unsent message")
+        editor.tap()
+        editor.typeText("Keep snake gameplay and make the score purple")
+        app.buttons["creation.generate"].tap()
+        XCTAssertTrue(edit.waitForExistence(timeout: 45))
+        let firstPayload = try await requestJSON(path: "works/\(fixture.id)", user: testAccount, expectedStatus: 200)
+        let firstWork = try XCTUnwrap(firstPayload["work"] as? [String: Any])
+        let firstArtifact = try XCTUnwrap(firstWork["artifactId"] as? String)
+        edit.tap()
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        editor.tap()
+        editor.typeText("Keep the purple score and make the buttons blue")
+        app.buttons["creation.generate"].tap()
+        XCTAssertTrue(edit.waitForExistence(timeout: 45))
+        let secondPayload = try await requestJSON(path: "works/\(fixture.id)", user: testAccount, expectedStatus: 200)
+        let secondWork = try XCTUnwrap(secondPayload["work"] as? [String: Any])
+        let generationID = try XCTUnwrap(secondWork["generationJobId"] as? String)
+        let generationPayload = try await requestJSON(path: "generations/\(generationID)", user: testAccount, expectedStatus: 200)
+        let generation = try XCTUnwrap(generationPayload["generation"] as? [String: Any])
+        XCTAssertEqual(generation["baseArtifactId"] as? String, firstArtifact, "The second change restarted from the published source instead of the private candidate")
     }
 
     private func launchApp() -> XCUIApplication {
@@ -279,7 +377,9 @@ final class CoreUserJourneyUITests: XCTestCase {
     ) -> Bool {
         let createNavigationBar = app.navigationBars["Create"]
         let topBoundary = createNavigationBar.exists ? createNavigationBar.frame.maxY + 8 : app.frame.minY + 60
-        let bottomBoundary = app.buttons["app.tab.create"].frame.minY - 8
+        let editorAction = app.buttons["generation.edit"]
+        let bottomBoundary = editorAction.exists && element.identifier != "generation.publish"
+            ? editorAction.frame.minY - 8 : app.buttons["app.tab.create"].frame.minY - 8
 
         for _ in 0..<16 {
             let frame = element.frame
@@ -379,7 +479,9 @@ final class CoreUserJourneyUITests: XCTestCase {
         let labels = [startLabel, pauseLabel, "Up", "Left", "Down", "Right"]
         let controls = labels.map { player.buttons[$0] }
         let tabTop = app.buttons["app.tab.create"].frame.minY
-        let visibleBottom = min(player.frame.maxY, tabTop - 4)
+        let editorAction = app.buttons["generation.edit"]
+        let chromeTop = editorAction.exists ? min(tabTop, editorAction.frame.minY - 8) : tabTop
+        let visibleBottom = min(player.frame.maxY, chromeTop - 4)
 
         for (label, control) in zip(labels, controls) {
             XCTAssertTrue(control.waitForExistence(timeout: 5), "The generated app omitted the \(label) control")

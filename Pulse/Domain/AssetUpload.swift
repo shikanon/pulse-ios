@@ -371,8 +371,14 @@ final class BackgroundAssetUploadCoordinator: NSObject, URLSessionTaskDelegate, 
 
     private override init() {
         super.init()
+        #if DEBUG && targetEnvironment(simulator)
+        // Simulator's background daemon can be unavailable on unsigned test
+        // builds. Exercise the real signed PUT with an in-process file upload.
+        let configuration = URLSessionConfiguration.default
+        #else
         let configuration = URLSessionConfiguration.background(withIdentifier: Self.sessionIdentifier)
         configuration.sessionSendsLaunchEvents = true
+        #endif
         configuration.isDiscretionary = false
         configuration.waitsForConnectivity = true
         session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)

@@ -82,6 +82,8 @@ mkdir -p "$result_dir"
     DATA_FILE="$run_dir/pulse.json" \
     GENERATION_STAGE_DELAY_MS=5 \
     PULSE_AGENT_MODE=deterministic-local \
+    PULSE_ASSET_STORAGE_MODE=local-metadata \
+    PULSE_OBJECT_STORAGE_ENV_FILE=disabled \
     PULSE_SUPPORT_URL="https://support.pulse.test/core-journeys" \
     go run ./cmd/pulse-api >"$api_log" 2>&1
 ) &
