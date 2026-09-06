@@ -58,6 +58,11 @@ struct ProfileSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Usage analytics") {
+                HStack { Text("Visits & play retention"); Spacer(); GrowthConsentControl() }
+                Text("Optional first-party activity measurement. This is separate from health diagnostics. Use the control to enable it or erase measured activity.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
             Section("Safety") {
                 if isLoadingBlockedUsers {
                     HStack { ProgressView(); Text("Loading blocked users…") }

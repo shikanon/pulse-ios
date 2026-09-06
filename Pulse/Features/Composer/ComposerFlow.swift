@@ -48,7 +48,7 @@ struct CreateView: View {
     }
 }
 
-private struct PendingAssetUpload: Identifiable {
+private struct PendingAssetUpload: Identifiable, Sendable {
     let id = UUID()
     let fileName: String
     let mediaType: String
@@ -660,7 +660,25 @@ private struct ComposerFlow: View {
             throw PulseAPIError(message: "You can add (remainingSlots) more material\(remainingSlots == 1 ? "" : "s") to this creation.")
         }
 
+        let remainingBytes = 4 * 1024 * 1024 - assets.reduce(0) { $0 + $1.sizeBytes }
+        let nonImageBytes = candidates.filter { !$0.mediaType.hasPrefix("image/") }.reduce(0) { $0 + $1.data.count }
+        let imageCount = candidates.filter { $0.mediaType.hasPrefix("image/") }.count
+        guard remainingBytes > nonImageBytes || (imageCount == 0 && remainingBytes == nonImageBytes) else {
+            throw PulseAPIError(message: "Selected media exceed the remaining game budget. Remove a material or choose a smaller file.")
+        }
+        let imageBudget = min(512 * 1024, (remainingBytes - nonImageBytes) / max(1, imageCount))
+        // Prepare the complete batch before creating any remote upload records.
+        var prepared: [PendingAssetUpload] = []
         for candidate in candidates {
+            let limit = candidate.mediaType.hasPrefix("image/") ? imageBudget : remainingBytes
+            let task = Task.detached(priority: .userInitiated) {
+                try GameImageOptimizer.prepare(data: candidate.data, fileName: candidate.fileName, mediaType: candidate.mediaType, maximumBytes: limit)
+            }
+            let image = try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+            try Task.checkCancellation()
+            prepared.append(PendingAssetUpload(fileName: image.fileName, mediaType: image.mediaType, data: image.data))
+        }
+        for candidate in prepared {
             try Task.checkCancellation()
             retryCandidate = candidate
             activeAssetUpload = ComposerAssetUpload(id: candidate.id, fileName: candidate.fileName, assetID: nil, phase: .preparing)
@@ -1167,7 +1185,7 @@ private struct InputSurface: View {
                     .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.12)))
                 }
 
-                if isRemix || isEditingVersion {
+                if isRemix || isEditingVersion || !creationContext.preserve.isEmpty {
                     DisclosureGroup("What should stay the same?") {
                         TextField("For example: keep the controls, scoring and cat image", text: $creationContext.preserve, axis: .vertical)
                             .lineLimit(2...4)
@@ -1183,6 +1201,8 @@ private struct InputSurface: View {
                         Spacer()
                         Text("\(assets.count)/8 · Added here").font(.caption).foregroundStyle(.secondary)
                     }
+                    Text("Large images are compressed for gameplay. GIF animation is preserved.")
+                        .font(.caption).foregroundStyle(.secondary)
                     HStack(alignment: .top, spacing: 9) {
                         ResourceActionButton(title: "Library", symbol: "square.grid.2x2", prominent: true, action: browseLibrary)
                             .disabled(isImporting || isSubmitting)
@@ -1190,7 +1210,7 @@ private struct InputSurface: View {
                             .accessibilityIdentifier("creation.resource-library")
 
                         if canAddPrivateAssets {
-                            PhotosPicker(selection: $pickerItems, maxSelectionCount: 4, matching: .any(of: [.images, .videos])) {
+                            PhotosPicker(selection: $pickerItems, maxSelectionCount: 4, matching: .any(of: [.images, .videos]), preferredItemEncoding: .current) {
                                 VStack(spacing: 7) {
                                     Image(systemName: "photo.on.rectangle.angled")
                                         .font(.title3.weight(.semibold))

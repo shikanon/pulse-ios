@@ -46,13 +46,11 @@ struct SharedWorkPlayer: View {
                 .padding(.horizontal, 20).padding(.top, 8)
                 ZStack {
                     if let artifactURL = model.artifactURL(for: work) {
-                        ArtifactPlayerView(
-                            url: artifactURL,
+                        PlayableWorkView(
+                            work: work, url: artifactURL,
                             isActive: isRuntimeActive,
-                            title: work.title,
-                            interactionSummary: work.theme,
                             accessibilityIdentifier: "shared.artifact.player",
-                            telemetryScreen: "shared_work"
+                            telemetryScreen: "shared_work", incomingChallenge: model.sharedChallenge
                         )
                     } else {
                         LivingCanvas(app: work, touchPoint: $touchPoint, isActive: isRuntimeActive)
@@ -81,6 +79,7 @@ struct SharedWorkPlayer: View {
                             .accessibilityLabel("Content reviewed for ages \(ageRating.rawValue) and up")
                     }
                     HStack(spacing: 10) {
+                        SaveWorkButton(work: work)
                         Button(action: requestRemix) {
                             Label("Remix", systemImage: "arrow.triangle.2.circlepath")
                         }

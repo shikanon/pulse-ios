@@ -3,6 +3,7 @@ import Foundation
 enum PulseDeepLink: Equatable {
     case remix(UUID)
     case publicWork(slug: String)
+    case challenge(slug: String, id: String)
     case report(slug: String)
 
     static func parse(_ url: URL, universalLinkHost: String? = PulseEndpointConfiguration.bundledUniversalLinkHost) -> PulseDeepLink? {
@@ -30,6 +31,11 @@ enum PulseDeepLink: Equatable {
                 identifier = components[1]
             case "a":
                 guard isValidPublicSlug(components[1]) else { return nil }
+                let challenges = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.filter { $0.name == "challenge" } ?? []
+                if !challenges.isEmpty {
+                    guard challenges.count == 1, let id = challenges[0].value, UUID(uuidString: id) != nil else { return nil }
+                    return .challenge(slug: components[1].lowercased(), id: id.lowercased())
+                }
                 return .publicWork(slug: components[1].lowercased())
             default:
                 return nil

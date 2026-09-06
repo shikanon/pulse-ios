@@ -42,6 +42,11 @@ struct ProfileView: View {
                         ProfileMetric(value: model.myWorks.filter { $0.creationMode == .remix }.count, label: "Remixes")
                         ProfileMetric(value: model.myWorks.reduce(0) { $0 + $1.likes }, label: "Likes")
                     }.padding(.vertical, 15).background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 18))
+                    NavigationLink { PlayCollectionView() } label: {
+                        Label("Saved & recently played", systemImage: "bookmark.fill")
+                            .font(.headline).frame(maxWidth: .infinity, alignment: .leading).padding(16)
+                            .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
+                    }.accessibilityIdentifier("profile.play-library")
                     HStack {
                         Text("Your works").font(.title3.bold())
                         Spacer()

@@ -1,3 +1,4 @@
+import { isEligiblePublishedWork } from './publication-policy.mjs'
 const maximumTitleLength = 96
 const maximumDescriptionLength = 200
 const artifactPreviewPath = /^\/v1\/artifacts\/[A-Za-z0-9-]{1,160}\/files\/preview\.png$/
@@ -56,11 +57,7 @@ function escapedMeta(name, content, attribute = 'name') {
 
 function isEligiblePublicWork(work) {
   return Boolean(
-    work &&
-    work.status === 'published' &&
-    work.verificationGrade === 'verified' &&
-    work.contentReviewStatus === 'approved' &&
-    work.ageRating === '4+' &&
+    isEligiblePublishedWork(work) &&
     compactText(work.title, maximumTitleLength) &&
     compactText(work.creator, maximumTitleLength)
   )

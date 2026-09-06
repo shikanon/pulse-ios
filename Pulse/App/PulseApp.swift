@@ -72,6 +72,7 @@ private struct RootView: View {
         .onAppear { runtimeLifecycle.update(scenePhase: scenePhase) }
         .onChange(of: scenePhase) { _, nextScenePhase in
             runtimeLifecycle.update(scenePhase: nextScenePhase)
+            if nextScenePhase == .active { Task { await appModel.api.growthVisit() } }
         }
         .onChange(of: appModel.pendingRemixSource?.id) { _, id in
             if id != nil { selectedTab = .create }
@@ -179,9 +180,9 @@ private struct RootView: View {
             }
         }
         .onChange(of: session.user) { _, user in
-            guard let user else { return }
+            guard let user else { appModel.savedWorks = []; appModel.recentWorks = []; return }
             appModel.creatorName = user.username
-            Task { await appModel.loadMyWorks() }
+            Task { await appModel.loadMyWorks(); await appModel.loadCollections(); await appModel.api.growthVisit() }
         }
     }
 
@@ -291,6 +292,8 @@ private struct RootView: View {
         }
         appModel.restoreCachedFeed()
         await appModel.loadFeed()
+        if session.user != nil { await appModel.loadCollections() }
+        await appModel.api.growthVisit()
         launchState = .ready
         await openQueuedDeepLink()
     }

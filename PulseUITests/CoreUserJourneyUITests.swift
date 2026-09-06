@@ -6,9 +6,16 @@ final class CoreUserJourneyUITests: XCTestCase {
     private let apiBaseURL = "http://127.0.0.1:18787/v1"
     private let testAccount = "pulse.e2e"
     private let fixtureCreator = "pulse.fixture.creator"
+    private var featuredFixtureID: String?
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+    }
+
+    override func tearDown() async throws {
+        if let featuredFixtureID {
+            _ = try await requestJSON(path: "admin/featured/\(featuredFixtureID)", method: "PUT", admin: "pulse.e2e.operator", body: ["rank": 0, "expiresAt": ISO8601DateFormatter().string(from: Date()), "reason": "Remove isolated journey placement"], expectedStatus: 200)
+        }
     }
 
     func testBrowseLikeAndCommentCoreJourney() async throws {
@@ -359,6 +366,30 @@ final class CoreUserJourneyUITests: XCTestCase {
         let generationPayload = try await requestJSON(path: "generations/\(generationID)", user: testAccount, expectedStatus: 200)
         let generation = try XCTUnwrap(generationPayload["generation"] as? [String: Any])
         XCTAssertEqual(generation["baseArtifactId"] as? String, firstArtifact, "The second change restarted from the published source instead of the private candidate")
+    }
+
+    func testFeaturedSavedAndReplayLibrary() async throws {
+        let fixture = try await createPublishedGeneratedWork(title: "Saved growth fixture", instruction: "Create a snake game", owner: fixtureCreator)
+        _ = try await requestJSON(path: "admin/featured/\(fixture.id)", method: "PUT", admin: "pulse.e2e.operator", body: ["rank": 1, "expiresAt": ISO8601DateFormatter().string(from: Date().addingTimeInterval(3600)), "reason": "Core journey curation fixture"], expectedStatus: 200)
+        featuredFixtureID = fixture.id
+        let app = launchApp()
+        XCTAssertTrue(app.buttons["Featured"].waitForExistence(timeout: 12))
+        XCTAssertTrue(app.staticTexts["@\(fixture.creator)"].waitForExistence(timeout: 12))
+        let save = activeFeedSummary(in: app).buttons["work.save"]
+        XCTAssertTrue(save.waitForExistence(timeout: 8))
+        save.tap()
+        XCTAssertTrue(app.buttons["Remove from saved"].waitForExistence(timeout: 8))
+        app.buttons["app.tab.profile"].tap()
+        let library = app.buttons["profile.play-library"]
+        XCTAssertTrue(library.waitForExistence(timeout: 8))
+        library.tap()
+        let replay = app.buttons["Play \(fixture.title)"]
+        XCTAssertTrue(replay.waitForExistence(timeout: 8))
+        attachScreenshot(named: "growth-saved-library", app: app)
+        replay.tap()
+        XCTAssertTrue(app.webViews["shared.artifact.player"].waitForExistence(timeout: 12))
+        XCTAssertTrue(app.webViews["shared.artifact.player"].buttons["START"].waitForExistence(timeout: 8))
+        attachScreenshot(named: "growth-saved-replay", app: app)
     }
 
     private func launchApp() -> XCUIApplication {

@@ -5,6 +5,11 @@ import Observation
 @Observable
 final class AppModel {
     var feed: [InteractiveApp] = []
+    var feedMode = "featured"
+    var savedWorks: [InteractiveApp] = []
+    var recentWorks: [InteractiveApp] = []
+    var collectionError: String?
+    var sharedChallenge: PulseChallenge?
     var myWorks: [InteractiveApp] = []
     var creatorName = "you"
     var comments: [UUID: [AppComment]] = [:]
@@ -85,7 +90,7 @@ final class AppModel {
             }
         }
         do {
-            let page = try await api.fetchFeedPage()
+            let page = try await api.fetchFeedPage(mode: feedMode)
             feed = page.data
             nextFeedCursor = page.nextCursor
             hasMoreFeed = page.nextCursor != nil
@@ -116,7 +121,7 @@ final class AppModel {
         isLoadingMoreFeed = true
         defer { isLoadingMoreFeed = false }
         do {
-            let page = try await api.fetchFeedPage(cursor: nextFeedCursor)
+            let page = try await api.fetchFeedPage(cursor: nextFeedCursor, mode: feedMode)
             let knownIDs = Set(feed.map(\.id))
             feed.append(contentsOf: page.data.filter { !knownIDs.contains($0.id) })
             self.nextFeedCursor = page.nextCursor
@@ -131,6 +136,24 @@ final class AppModel {
         }
     }
 
+    func selectFeedMode(_ mode: String) async {
+        guard !isLoadingFeed, !isRefreshingFeed, !isLoadingMoreFeed, !isOfflineReadOnly else { return }
+        feedMode = mode; await loadFeed()
+    }
+    func loadCollections() async {
+        do {
+            async let saved = api.fetchCollection(kind: "saved")
+            async let recent = api.fetchCollection(kind: "recent")
+            (savedWorks, recentWorks) = try await (saved, recent)
+            collectionError = nil
+        } catch { collectionError = "Couldn’t load your saved and recently played works." }
+    }
+    func toggleSaved(_ work: InteractiveApp) async throws {
+        let saved = !savedWorks.contains(where: { $0.id == work.id })
+        try await api.saveWork(work.id, saved: saved)
+        savedWorks.removeAll { $0.id == work.id }
+        if saved { savedWorks.insert(work, at: 0) }
+    }
     func toggleLike(_ appID: UUID) async {
         guard let index = feed.firstIndex(where: { $0.id == appID }) else { return }
         let previous = feed[index]
@@ -464,6 +487,13 @@ final class AppModel {
             return await resolveRemixLink(workID: workID) ? pendingDeepLink : nil
         case let .publicWork(slug):
             return await resolvePublicWorkLink(slug: slug) ? pendingDeepLink : nil
+        case let .challenge(slug, id):
+            do {
+                let challenge = try await api.fetchChallenge(id: id)
+                guard await resolvePublicWorkLink(slug: slug), sharedWork?.id.uuidString.lowercased() == challenge.workId.lowercased(), sharedWork?.artifactID?.uuidString.lowercased() == challenge.artifactId.lowercased() else { sharedWork = nil; deepLinkUnavailable = .removed; return nil }
+                sharedChallenge = challenge
+                return pendingDeepLink
+            } catch { sharedWork = nil; deepLinkUnavailable = DeepLinkUnavailable(error: error); return nil }
         case let .report(slug):
             return await resolveReportLink(slug: slug) ? pendingDeepLink : nil
         }
@@ -496,6 +526,7 @@ final class AppModel {
                 deepLinkUnavailable = .removed
                 return false
             }
+            sharedChallenge = nil
             sharedWork = work
             pendingDeepLink = nil
             deepLinkUnavailable = nil
@@ -539,6 +570,7 @@ final class AppModel {
     }
 
     func clearSharedWork() {
+        sharedChallenge = nil
         sharedWork = nil
         deepLinkUnavailable = nil
     }

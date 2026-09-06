@@ -215,9 +215,40 @@ struct PulseAPIClient: Sendable {
         try await sendUnauthenticatedNoContent(path: "client-events", method: "POST", body: payload)
     }
 
-    func fetchFeedPage(cursor: String? = nil, limit: Int = 20) async throws -> FeedPage {
+    func forgetGrowth(_ identity: PulseGrowthIdentity) async throws {
+        _ = try await sendNoContent(path: "growth/identity", method: "DELETE", body: identity)
+    }
+    func growthVisit() async {
+        let identity = PulseGrowthPreferences.identity
+        guard identity.consent else { return }
+        _ = try? await sendNoContent(path: "growth/visits", method: "POST", body: identity)
+    }
+
+    func fetchCollection(kind: String) async throws -> [InteractiveApp] {
+        // These are fixed server-owned routes, not arbitrary query input.
+        let path = kind == "recent" ? "me/recent" : "me/saved"
+        return try await send(path: path, as: GrowthCollectionEnvelope.self).data
+    }
+    func saveWork(_ id: UUID, saved: Bool) async throws {
+        _ = try await sendNoContent(path: "works/\(id.pulsePathComponent)/save", method: saved ? "PUT" : "DELETE")
+    }
+    func startPlay(workID: UUID, challengeID: String?) async throws -> PulsePlaySession {
+        let identity = PulseGrowthPreferences.identity
+        return try await send(path: "play-sessions", method: "POST", body: PlayStartPayload(platform: identity.platform, deviceId: identity.deviceId, consent: identity.consent, workId: workID.pulsePathComponent, challengeId: challengeID), as: PlaySessionEnvelope.self).session
+    }
+    func recordPlay(id: String, message: PulsePlayMessage) async throws -> PulsePlaySession {
+        try await send(path: "play-sessions/\(id)/events", method: "POST", body: PlayEventPayload(name: message.name, score: message.score), as: PlaySessionEnvelope.self).session
+    }
+    func createChallenge(playID: String) async throws -> PulseChallenge {
+        try await send(path: "play-sessions/\(playID)/challenge", method: "POST", body: PlayEmptyPayload(), as: ChallengeEnvelope.self).challenge
+    }
+    func fetchChallenge(id: String) async throws -> PulseChallenge {
+        try await send(path: "public/challenges/\(id)", as: ChallengeEnvelope.self).challenge
+    }
+
+    func fetchFeedPage(cursor: String? = nil, limit: Int = 20, mode: String = "featured") async throws -> FeedPage {
         var components = URLComponents(url: baseURL.appending(path: "feed"), resolvingAgainstBaseURL: false)
-        components?.queryItems = [URLQueryItem(name: "limit", value: String(min(max(limit, 1), 50)))]
+        components?.queryItems = [URLQueryItem(name: "limit", value: String(min(max(limit, 1), 50))), URLQueryItem(name: "mode", value: mode == "latest" ? "latest" : "featured")]
         if let cursor, !cursor.isEmpty {
             components?.queryItems?.append(URLQueryItem(name: "cursor", value: cursor))
         }
@@ -814,3 +845,11 @@ struct CreateWorkPayload: Encodable {
 private extension UUID {
     var pulsePathComponent: String { uuidString.lowercased() }
 }
+
+private struct GrowthCollectionEnvelope: Decodable { let data: [InteractiveApp] }
+private struct PlaySessionEnvelope: Decodable { let session: PulsePlaySession }
+private struct ChallengeEnvelope: Decodable { let challenge: PulseChallenge }
+private struct PlayStartPayload: Encodable { let platform: String; let deviceId: String; let consent: Bool; let workId: String; let challengeId: String? }
+private struct PlayEventPayload: Encodable { let name: String; let score: Int? }
+
+private struct PlayEmptyPayload: Encodable {}

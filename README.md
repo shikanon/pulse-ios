@@ -117,12 +117,22 @@ PULSE_UNIVERSAL_LINK_HOST=play.your-approved-domain.tld \
 scripts/verify-associated-domains.sh
 ```
 
-公开 Player 只加载服务端确认 `approved / 4+ / verified` 的同源 Artifact，宿主 iframe 保持 `sandbox="allow-scripts"`。页面对公开读取 `404/410/401/403`、`400/422` 和暂时性网络或服务错误分别展示不泄露审核原因的失效、不兼容和可重试状态，不显示上游错误文本；生成 Bundle 的交互逻辑必须使用同源外置脚本，以符合 Artifact `script-src 'self'` CSP。若公开 `/v1/client-configuration` 提供无凭据 HTTPS `privacyPolicyURL`，播放成功和失败状态都会显示 Privacy policy，缺失或不安全值不会阻塞作品也不会生成链接；配置的 `appStoreURL` 也只有在 `apps.apple.com` 或 `itunes.apple.com` 才显示为 Get Pulse。已加载的公开作品还提供 `pulse://report/{publicSlug}` 的 Report in Pulse 入口，App 会重新验证公开状态并要求登录后提交。页面还提供键盘 Skip link、动态内容可滚动详情卡、Reduce Motion 支持、浅色 Artifact 下保持可读的宿主品牌栏，以及明确的复制链接反馈。
+公开 Player 只加载服务端确认仍为 published / verified 的同源 Artifact：pending 的发布后审核可正常游玩，但不显示已审核年龄标签；approved 必须为 4+，宿主 iframe 保持 `sandbox="allow-scripts"`。页面对公开读取 `404/410/401/403`、`400/422` 和暂时性网络或服务错误分别展示不泄露审核原因的失效、不兼容和可重试状态，不显示上游错误文本；生成 Bundle 的交互逻辑必须使用同源外置脚本，以符合 Artifact `script-src 'self'` CSP。若公开 `/v1/client-configuration` 提供无凭据 HTTPS `privacyPolicyURL`，播放成功和失败状态都会显示 Privacy policy，缺失或不安全值不会阻塞作品也不会生成链接；配置的 `appStoreURL` 也只有在 `apps.apple.com` 或 `itunes.apple.com` 才显示为 Get Pulse。已加载的公开作品还提供 `pulse://report/{publicSlug}` 的 Report in Pulse 入口，App 会重新验证公开状态并要求登录后提交。页面还提供键盘 Skip link、动态内容可滚动详情卡、Reduce Motion 支持、浅色 Artifact 下保持可读的宿主品牌栏，以及明确的复制链接反馈。
 
 ### 动态分享预览
 
-静态 Vite 页面不能让社交爬虫执行脚本后再读取作品资料。`web-player/edge-worker.mjs` 因此提供 Cloudflare Pages/Workers 适配器：已知社交或搜索爬虫访问 `/a/{slug}` 时，边缘层从同一 API 的公开作品接口读取数据，并仅为 `published + verified + approved + 4+` 的当前作品返回动态 Open Graph、Twitter、作者归因和 Remix 血缘元信息。普通浏览器请求仍透传到现有静态播放器，不会改为元数据页面。
+静态 Vite 页面不能让社交爬虫执行脚本后再读取作品资料。`web-player/edge-worker.mjs` 因此提供 Cloudflare Pages/Workers 适配器：已知社交或搜索爬虫访问 `/a/{slug}` 时，边缘层从同一 API 的公开作品接口读取数据，并仅为服务端确认仍公开且 verified 的当前作品（pending 或 approved/4+）返回动态 Open Graph、Twitter、作者归因和 Remix 血缘元信息。普通浏览器请求仍透传到现有静态播放器，不会改为元数据页面。
 
 `web-player/wrangler.example.jsonc` 说明所需的 `ASSETS` 绑定，以及精确 HTTPS 的 `PULSE_API_ORIGIN` 和 `PULSE_PUBLIC_PLAYER_ORIGIN`。边缘 HTML 仅使用 API 派生的公开字段，图片也只接受当前不可变 Artifact 的固定 `preview.png` 路径；撤销、隐藏、超龄或失效链接对爬虫返回 `404`、`noindex`、`private, no-store`，暂时故障返回无内容的 `503`。真实域名绑定、Cloudflare 部署、Slack/Discord/微信等实际预览与各平台自身缓存失效仍是发布门禁，不能由本地模拟替代。
 
 页面验收依据见 [客户端页面设计 PRD](docs/Pulse客户端页面设计PRD.md)。
+
+Creator 的照片导入保留原始编码，在创建上传记录前用 ImageIO 为整个批次准备游戏副本。图片按剩余 4 MiB 预算、每张最高 512 KiB 进行缩放；GIF 保留全部帧、时长和循环信息，不退化为静态首帧；JPEG 保持 JPEG，透明图片保留透明度。压缩运行在后台任务中，可取消，无法满足预算时明确报错；视频和音频仍需用户提供能放入预算的版本。此处理覆盖本次照片导入，不自动改写已存在的库素材或 Remix 继承素材。`GameImageOptimizerTests` 覆盖多帧、时长、循环、透明度、JPEG 体积及失败路径；真实 GIF 仍须在生成作品内验证动画和玩法绑定。
+
+## 精选、收藏复玩与同题挑战
+
+Home 顶部提供 Featured / Latest，底部书签用于保存作品。Profile → Saved & recently played 可跨设备查看登录账号的收藏和最近有效游玩；打开时重新验证公开状态，下架作品不会通过收藏绕过访问控制。Home 的图表菜单及 Settings → Usage analytics 可单独开启第一方访问/游玩统计，也可停止并清除记录；默认关闭，不改变原有健康诊断选择。
+
+支持 Pulse play v1 协议的计分作品结算后显示结果、Play again 和 Share result。结果卡可生成 PNG 与挑战二维码，挑战链接沿用已配置的 `/a/:slug?challenge=:id` Universal Link 路径。接收者先验证挑战 ID、作品、当前 Artifact 和有效期，再使用同一随机种子加载；失效时不默默进入新版本。分数为作品报告，未实现防作弊排行。旧作品仍可直接游玩、分享普通作品链接和收藏；新生成计分作品需通过真实玩法验收确认其协议和随机源符合约定。
+
+Web Player 同样提供结果链接/PNG、再玩一次和本浏览器的收藏/最近游玩。Web 收藏没有冒充账号同步；作品和宿主信息采用独立区域，避免分享卡遮挡游戏按钮。统计默认关闭，开启后仅采集固定第一方事件，后台按设备与账号群体分别计算 DAU/留存。

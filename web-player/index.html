@@ -24,7 +24,7 @@
       .eyebrow { margin:0 0 10px; color:var(--lime); font-size:13px; font-weight:650; } h1 { margin:0; font-size:clamp(32px,6vw,54px); letter-spacing:-.065em; line-height:.96; } .byline { color:#d7d8d4; margin:10px 0 0; font-size:15px; } .review-status { display:inline-flex; gap:6px; align-items:center; margin:12px 0 0; color:#f0f1ed; font-size:13px; font-weight:700; } .review-status::before { content:"✓"; display:grid; place-items:center; width:17px; height:17px; border-radius:50%; background:var(--lime); color:#080808; font-size:11px; } .description { max-width:44ch; color:#f0f0ee; line-height:1.45; margin:16px 0 18px; }
       .actions { display:flex; gap:10px; flex-wrap:wrap; } button, a { appearance:none; display:inline-flex; align-items:center; justify-content:center; min-height:42px; border:1px solid transparent; color:#080808; font:inherit; font-weight:740; border-radius:10px; padding:10px 14px; background:var(--lime); cursor:pointer; text-decoration:none; } button.secondary, a.secondary { background:#202220; color:#fff; border-color:var(--line); } button:disabled, a[aria-disabled="true"] { cursor:not-allowed; opacity:.55; } button:focus-visible, a:focus-visible { outline:3px solid #fff; outline-offset:3px; }
       .load-state { position:absolute; z-index:3; top:50%; left:50%; width:min(420px,calc(100vw - 40px)); translate:-50% -50%; padding:20px; border:1px solid var(--line); border-radius:14px; background:#101112; color:#eee; text-align:center; line-height:1.45; }
-      .load-state[hidden], article[hidden], a[hidden], button[hidden] { display:none; }
+      .load-state[hidden], article[hidden], a[hidden], button[hidden], .review-status[hidden] { display:none; }
       .state-title { margin:0; font-size:clamp(22px,4vw,29px); font-weight:780; letter-spacing:-.045em; line-height:1.08; }
       .state-detail { max-width:34ch; margin:10px auto 0; color:#d9dad6; }
       .state-actions { display:flex; justify-content:center; margin-top:18px; }
@@ -33,6 +33,20 @@
       .visually-hidden { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
       @media (max-width:620px) { article { max-height:min(62svh, 520px); padding:18px; border-radius:18px; }.status span { display:none; } }
       @media (prefers-reduced-motion:reduce) { *, *::before, *::after { scroll-behavior:auto !important; transition-duration:0.01ms !important; animation-duration:0.01ms !important; animation-iteration-count:1 !important; } }
+      .play-library-wrap { max-width:1100px;margin:24px auto;padding:24px;color:#a7aaa4;font-size:13px;line-height:1.6; }
+      .play-library-wrap summary { cursor:pointer;color:#fff;font-size:16px;font-weight:650; }
+      #play-library a { display:block;color:#b4ff14;background:#151717;padding:12px 16px;margin:8px 0;text-align:left; }
+      .usage-choice { display:flex;gap:10px;align-items:center;margin-top:22px;color:#fff; }
+      .usage-choice input { width:20px;height:20px;accent-color:#b4ff14; }
+      #play-result { border:1px solid #b4ff1455;border-radius:14px;padding:16px;margin-bottom:18px; }
+      #result-score {font-size:24px;} #play-result .actions {margin-top:12px;}
+      /* Keep host actions outside the playable viewport. Overlay cards can
+         otherwise intercept generated START and direction buttons. */
+      main { display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,400px);gap:24px;max-width:1240px;margin:0 auto;padding:108px 28px 28px;min-height:0;overflow:visible; }
+      iframe { position:relative;inset:auto;width:100%;height: min(760px,calc(100svh - 136px));min-height:540px;border-radius:20px;grid-column:1;grid-row:1; }
+      article {position:relative;left:auto;bottom:auto;translate:none;width:100%;max-height:none;overflow:visible;grid-column:2;grid-row:1;align-self:start;box-shadow:none;}
+      @media(max-width:760px){ main {grid-template-columns:minmax(0,1fr);padding:88px 12px 12px;gap:16px;} iframe {height: min(620px,72svh);min-height:480px;} article {grid-column:1;grid-row:2;} header {top:14px;left:14px;right:14px;} .play-library-wrap{margin-top:0;padding:20px;} }
+      main:has(.load-state:not([hidden])) { min-height:100svh; }
     </style>
   </head>
   <body>
@@ -58,12 +72,19 @@
         <p id="byline" class="byline"></p>
         <p id="review-status" class="review-status" aria-label="Age rating: 4+. Reviewed for public sharing."><span id="age-rating">Age rating: 4+</span><span aria-hidden="true"> · </span><span id="review-copy">Reviewed for public sharing</span></p>
         <p id="description" class="description"></p>
-        <div class="actions"><a id="remix" href="#">Remix in Pulse</a><button id="copy-link" class="secondary">Copy link</button><a id="report-content" class="secondary" hidden>Report in Pulse</a><a id="app-store" class="secondary" target="_blank" rel="noopener noreferrer" hidden>Get Pulse</a><a id="privacy-policy" class="secondary" target="_blank" rel="noopener noreferrer" hidden>Privacy policy</a></div>
+        <p id="challenge-target" class="eyebrow" hidden></p><div id="play-result" hidden><strong id="result-score"></strong><div class="actions"><button id="replay">Play again</button><button id="share-result">Share result</button><button id="download-result" class="secondary">Save result card</button></div></div>
+        <div class="actions"><button id="save-work" class="secondary">Save work</button><a id="remix" href="#">Remix in Pulse</a><button id="copy-link" class="secondary">Copy link</button><a id="report-content" class="secondary" hidden>Report in Pulse</a><a id="app-store" class="secondary" target="_blank" rel="noopener noreferrer" hidden>Get Pulse</a><a id="privacy-policy" class="secondary" target="_blank" rel="noopener noreferrer" hidden>Privacy policy</a></div>
         <p id="action-status" class="visually-hidden" aria-live="polite" aria-atomic="true"></p>
       </article>
     </main>
+    <section class="play-library-wrap">
+      <details><summary>Saved & recently played</summary><p>Stored in this browser. Opening a work checks whether it is still available.</p><div id="play-library"></div></details>
+      <label class="usage-choice"><input id="usage-consent" type="checkbox"> Allow optional usage analytics</label><p>First-party visits and play retention, without advertising IDs. Turning this off erases measured activity for this browser.</p>
+    </section>
     <script type="module">
       import { resolvePublicAPIOrigin } from './config.mjs';
+      import { createPlayHost } from './play.mjs';
+      import { isEligiblePublishedWork } from './publication-policy.mjs';
 
       const query = new URLSearchParams(location.search);
       const API_ORIGIN = resolvePublicAPIOrigin(import.meta.env.VITE_PULSE_API_ORIGIN, import.meta.env.DEV) || '';
@@ -94,8 +115,10 @@
       let hydrationAttempt = 0;
       let hydrationAbortController;
       let currentFailure;
+      let playHost;
 
       const failureStates = {
+        challenge: { title: 'This challenge is no longer available', detail: 'It may have expired or the published version may have changed. Ask the sender for a new challenge link.', status: 'Challenge unavailable' },
         incompleteLink: {
           title: 'This link is incomplete',
           detail: 'Ask the sender to share the full Pulse link.',
@@ -237,6 +260,7 @@
         const attempt = ++hydrationAttempt;
         hydrationAbortController?.abort();
         hydrationAbortController = new AbortController();
+        playHost?.invalidate();
         resetLoading();
         if (!slug) return showFailure('incompleteLink');
         if (!apiURL) return showFailure('configuration');
@@ -250,7 +274,7 @@
           const payload = await response.json();
           if (attempt !== hydrationAttempt) return;
           const work = payload.work;
-          if (!work.artifactId || !work.artifactEntryUrl || work.contentReviewStatus !== 'approved' || work.ageRating !== '4+') {
+          if (!work.artifactId || !work.artifactEntryUrl || !isEligiblePublishedWork(work)) {
             return showFailure('unavailable');
           }
 
@@ -259,10 +283,11 @@
           document.querySelector('#eyebrow').textContent = work.interaction || 'Interactive work';
           document.querySelector('#description').textContent = work.prompt || 'Open in Pulse to explore this work.';
           document.querySelector('#byline').textContent = `by @${work.creator} · ${compact(work.likes)} likes · ${work.verificationGrade}`;
+          reviewStatus.hidden = work.contentReviewStatus !== 'approved';
           ageRating.textContent = `Age rating: ${work.ageRating}`;
           reviewCopy.textContent = 'Reviewed for public sharing';
           reviewStatus.setAttribute('aria-label', `Age rating: ${work.ageRating}. Reviewed for public sharing.`);
-          statusCopy.textContent = `${work.verificationGrade} published work`;
+          statusCopy.textContent = work.contentReviewStatus === 'approved' ? `${work.verificationGrade} published work` : 'Published · review pending';
           publicationStatus.classList.remove('is-unavailable');
           const remix = document.querySelector('#remix');
           remix.href = `pulse://remix/${encodeURIComponent(work.id)}`;
@@ -297,10 +322,12 @@
             if (attempt === hydrationAttempt) showFailure('temporary');
           }, 12000);
           artifact.hidden = false;
-          artifact.src = entry.toString();
+          const playEntry = await playHost.prepare(work, entry);
+          if (attempt !== hydrationAttempt) return;
+          artifact.src = playEntry.toString();
           card.hidden = false;
         } catch (error) {
-          if (attempt === hydrationAttempt && error.name !== 'AbortError') showFailure('temporary');
+          if (attempt === hydrationAttempt && error.name !== 'AbortError') showFailure(error.code === 'challenge_unavailable' || error.message === 'Invalid challenge link' ? 'challenge' : 'temporary');
         }
       }
 
@@ -315,6 +342,7 @@
         }
       });
       retryLoad.addEventListener('click', hydrate);
+      playHost = createPlayHost({ apiURL, artifact, status: actionStatus, reload: hydrate });
       loadPublicPolicyLinks();
       hydrate();
     </script>

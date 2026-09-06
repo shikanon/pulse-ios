@@ -77,6 +77,17 @@ struct FeedView: View {
                 .padding(.horizontal)
             }
         }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            HStack(spacing: 18) {
+                ForEach(["featured", "latest"], id: \.self) { mode in
+                    Button(mode == "featured" ? "Featured" : "Latest") { Task { await model.selectFeedMode(mode) } }
+                        .font(.subheadline.bold()).foregroundStyle(model.feedMode == mode ? Color.pulseLime : .secondary)
+                        .disabled(model.isOfflineReadOnly || model.isLoadingFeed || model.isRefreshingFeed)
+                }
+                Spacer()
+                GrowthConsentControl()
+            }.padding(.horizontal, 20).frame(height: 40).background(.black)
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.black)
         .sheet(isPresented: $isRemixAuthenticationPresented) {
@@ -252,11 +263,9 @@ private struct FeedCard: View {
             VStack(spacing: 0) {
                 ZStack {
                     if !model.isOfflineReadOnly, let artifactURL, isActive {
-                        ArtifactPlayerView(
-                            url: artifactURL,
+                        PlayableWorkView(
+                            work: app, url: artifactURL,
                             isActive: isRuntimeActive,
-                            title: app.title,
-                            interactionSummary: app.theme,
                             accessibilityIdentifier: "published.artifact.player",
                             telemetryScreen: "feed"
                         )
@@ -531,6 +540,7 @@ private struct WorkSummaryPanel: View {
                 )
                 .disabled(!app.allowRemix)
                 .opacity(app.allowRemix ? 1 : 0.45)
+                SaveWorkButton(work: app).frame(maxWidth: .infinity)
                 FeedBottomAction(
                     symbol: "square.and.arrow.up",
                     count: nil,

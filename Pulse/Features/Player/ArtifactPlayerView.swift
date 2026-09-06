@@ -9,6 +9,8 @@ struct ArtifactPlayerView: View {
     let interactionSummary: String
     let accessibilityIdentifier: String
     let telemetryScreen: String
+    let playSeed: UInt32?
+    let onPlayMessage: ((PulsePlayMessage) -> Void)?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(PulseTelemetry.self) private var telemetry
@@ -21,7 +23,9 @@ struct ArtifactPlayerView: View {
         title: String,
         interactionSummary: String,
         accessibilityIdentifier: String,
-        telemetryScreen: String = "unknown"
+        telemetryScreen: String = "unknown",
+        playSeed: UInt32? = nil,
+        onPlayMessage: ((PulsePlayMessage) -> Void)? = nil
     ) {
         self.url = url
         self.isActive = isActive
@@ -29,6 +33,8 @@ struct ArtifactPlayerView: View {
         self.interactionSummary = interactionSummary
         self.accessibilityIdentifier = accessibilityIdentifier
         self.telemetryScreen = telemetryScreen
+        self.playSeed = playSeed
+        self.onPlayMessage = onPlayMessage
     }
 
     var body: some View {
@@ -43,7 +49,8 @@ struct ArtifactPlayerView: View {
                 interactionSummary: interactionSummary,
                 reloadToken: reloadToken,
                 loadState: $loadState,
-                accessibilityIdentifier: accessibilityIdentifier
+                accessibilityIdentifier: accessibilityIdentifier,
+                playSeed: playSeed, onPlayMessage: onPlayMessage
             )
             .opacity(loadState == .ready ? 1 : 0)
 
@@ -161,6 +168,8 @@ private struct ArtifactWebView: UIViewRepresentable {
     let reloadToken: UUID
     @Binding var loadState: ArtifactPlayerLoadState
     let accessibilityIdentifier: String
+    let playSeed: UInt32?
+    let onPlayMessage: ((PulsePlayMessage) -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(loadState: $loadState)
@@ -175,6 +184,12 @@ private struct ArtifactWebView: UIViewRepresentable {
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
 
+        context.coordinator.onPlayMessage = onPlayMessage
+        context.coordinator.schemeHandler.playRuntimeEnabled = playSeed != nil
+        if let playSeed {
+            configuration.userContentController.addUserScript(WKUserScript(source: "globalThis.__pulseSeed = \(playSeed);", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+            configuration.userContentController.add(context.coordinator, name: "pulsePlay")
+        }
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
         webView.isOpaque = false
@@ -199,6 +214,7 @@ private struct ArtifactWebView: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.loadState = $loadState
+        context.coordinator.onPlayMessage = onPlayMessage
         context.coordinator.load(url: url, reloadToken: reloadToken, in: webView)
         webView.accessibilityLabel = PulseAccessibility.interactiveSummary(title: title, theme: interactionSummary)
         context.coordinator.setRuntimeMotion(isActive: isActive, reduceMotion: reduceMotion, in: webView)
@@ -206,12 +222,20 @@ private struct ArtifactWebView: UIViewRepresentable {
 
     static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
         coordinator.stopRuntime(in: webView)
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "pulsePlay")
         webView.navigationDelegate = nil
         coordinator.webView = nil
     }
 
     @MainActor
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+        var onPlayMessage: ((PulsePlayMessage) -> Void)?
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.frameInfo.isMainFrame, message.webView === webView,
+                  let parsed = PulsePlayMessage(body: message.body),
+                  motionState == .active || parsed.name == "protocol" else { return }
+            onPlayMessage?(parsed)
+        }
         var loadState: Binding<ArtifactPlayerLoadState>
         weak var webView: WKWebView?
         let schemeHandler = ArtifactSchemeHandler()
@@ -359,6 +383,7 @@ struct ArtifactRuntimeSource: Sendable {
 }
 
 private final class ArtifactSchemeHandler: NSObject, WKURLSchemeHandler {
+    var playRuntimeEnabled = false
     private var source: ArtifactRuntimeSource?
     private let requestLock = NSLock()
     private var requests: [ObjectIdentifier: Task<Void, Never>] = [:]
@@ -382,7 +407,13 @@ private final class ArtifactSchemeHandler: NSObject, WKURLSchemeHandler {
             defer { self?.removeRequest(identifier) }
             do {
                 guard !Task.isCancelled else { return }
-                var request = URLRequest(url: apiURL, cachePolicy: .reloadRevalidatingCacheData, timeoutInterval: 30)
+                var requestedURL = apiURL
+                if self?.playRuntimeEnabled == true, runtimeURL.pathExtension.lowercased() == "html" {
+                    var components = URLComponents(url: apiURL, resolvingAgainstBaseURL: false)
+                    components?.queryItems = [URLQueryItem(name: "pulseRuntime", value: "1")]
+                    requestedURL = components?.url ?? apiURL
+                }
+                var request = URLRequest(url: requestedURL, cachePolicy: .reloadRevalidatingCacheData, timeoutInterval: 30)
                 request.httpMethod = "GET"
                 request.setValue("*/*", forHTTPHeaderField: "Accept")
                 PulseClientRuntimeDeclaration.apply(to: &request)
