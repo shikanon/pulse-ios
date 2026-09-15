@@ -12,11 +12,13 @@ struct FeedView: View {
     @State private var isRemixAuthenticationPresented = false
     @State private var activeAppID: UUID?
     @State private var offlineActionMessage: String?
+    @Binding var isImmersive: Bool
     let isTabSelected: Bool
     let resetToken: UUID
     let reconnect: () -> Void
 
-    init(isTabSelected: Bool, resetToken: UUID, reconnect: @escaping () -> Void) {
+    init(isTabSelected: Bool, isImmersive: Binding<Bool>, resetToken: UUID, reconnect: @escaping () -> Void) {
+        self._isImmersive = isImmersive
         self.isTabSelected = isTabSelected
         self.resetToken = resetToken
         self.reconnect = reconnect
@@ -35,6 +37,9 @@ struct FeedView: View {
                                 FeedCard(
                                     app: app,
                                     isActive: activeAppID == app.id,
+                                    isImmersive: isImmersive && activeAppID == app.id,
+                                    onEnterPlay: { isImmersive = true },
+                                    onExitPlay: { isImmersive = false },
                                     isApplicationActive: scenePhase == .active && isTabSelected,
                                     isSystemRuntimeAvailable: runtimeLifecycle.allowsRuntime,
                                     isRemixPresented: isRemixAuthenticationPresented || offlineActionMessage != nil,
@@ -53,15 +58,19 @@ struct FeedView: View {
                     }
                     .scrollTargetBehavior(.paging)
                     .scrollIndicators(.hidden)
-                    .scrollPosition(id: $activeAppID, anchor: .top)
+                    .scrollDisabled(isImmersive)
+                    .scrollPosition(id: Binding(
+                        get: { activeAppID },
+                        set: { if !isImmersive { activeAppID = $0 } }
+                    ), anchor: .top)
                     .refreshable {
                         await model.refreshFeed()
                     }
                 }
             }
-            if model.isLoadingFeed {
+            if model.isLoadingFeed, !isImmersive {
                 ProgressView("Loading Pulse…").padding(12).background(.ultraThinMaterial, in: Capsule()).padding(.top, 58)
-            } else if let error = model.feedError {
+            } else if let error = model.feedError, !isImmersive {
                 FeedStatusNotice(
                     message: error,
                     usesCachedFeed: model.feedDataSource.cachedAt != nil,
@@ -78,15 +87,17 @@ struct FeedView: View {
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            HStack(spacing: 18) {
-                ForEach(["featured", "latest"], id: \.self) { mode in
-                    Button(mode == "featured" ? "Featured" : "Latest") { Task { await model.selectFeedMode(mode) } }
-                        .font(.subheadline.bold()).foregroundStyle(model.feedMode == mode ? Color.pulseLime : .secondary)
-                        .disabled(model.isOfflineReadOnly || model.isLoadingFeed || model.isRefreshingFeed)
-                }
-                Spacer()
-                GrowthConsentControl()
-            }.padding(.horizontal, 20).frame(height: 40).background(.black)
+            if !isImmersive {
+                HStack(spacing: 18) {
+                    ForEach(["featured", "latest"], id: \.self) { mode in
+                        Button(mode == "featured" ? "Featured" : "Latest") { Task { await model.selectFeedMode(mode) } }
+                            .font(.subheadline.bold()).foregroundStyle(model.feedMode == mode ? Color.pulseLime : .secondary)
+                            .disabled(model.isOfflineReadOnly || model.isLoadingFeed || model.isRefreshingFeed)
+                    }
+                    Spacer()
+                    GrowthConsentControl()
+                }.padding(.horizontal, 20).frame(height: 40).background(.black)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.black)
@@ -103,6 +114,7 @@ struct FeedView: View {
         }
         .onChange(of: model.feed) { _, feed in
             if activeAppID == nil || !feed.contains(where: { $0.id == activeAppID }) {
+                isImmersive = false
                 activeAppID = feed.first?.id
             }
             if !feed.isEmpty {
@@ -118,6 +130,7 @@ struct FeedView: View {
             }
         }
         .onChange(of: activeAppID) { _, appID in
+            isImmersive = false
             if appID != nil {
                 telemetry.record(.workImpression, attributes: ["screen_id": "feed"])
             }
@@ -137,7 +150,14 @@ struct FeedView: View {
             activeAppID = id
             model.feedFocusID = nil
         }
+        .onChange(of: isTabSelected) { _, selected in
+            if !selected { isImmersive = false }
+        }
+        .onChange(of: model.isOfflineReadOnly) { _, offline in
+            if offline { isImmersive = false }
+        }
         .onChange(of: resetToken) { _, _ in
+            isImmersive = false
             activeAppID = model.feed.first?.id
         }
         .onChange(of: session.canResumeMemberActions) { _, canResume in
@@ -171,12 +191,13 @@ struct FeedView: View {
 
 struct HomeTabRoot: View {
     let isSelected: Bool
+    @Binding var isImmersive: Bool
     let resetToken: UUID
     let reconnect: () -> Void
 
     var body: some View {
         NavigationStack {
-            FeedView(isTabSelected: isSelected, resetToken: resetToken, reconnect: reconnect)
+            FeedView(isTabSelected: isSelected, isImmersive: $isImmersive, resetToken: resetToken, reconnect: reconnect)
         }
     }
 }
@@ -215,6 +236,9 @@ private struct FeedCard: View {
     @Environment(PulseTelemetry.self) private var telemetry
     let app: InteractiveApp
     let isActive: Bool
+    let isImmersive: Bool
+    let onEnterPlay: () -> Void
+    let onExitPlay: () -> Void
     let isApplicationActive: Bool
     let isSystemRuntimeAvailable: Bool
     let isRemixPresented: Bool
@@ -258,7 +282,10 @@ private struct FeedCard: View {
         GeometryReader { proxy in
             let detailsHeight = InteractiveSurfaceLayout.homeSummaryHeight
             let tabBarClearance = InteractiveSurfaceLayout.homeTabBarClearance
-            let interactionHeight = InteractiveSurfaceLayout.interactionHeight(in: proxy.size.height)
+            let exitBarHeight: CGFloat = isImmersive ? 52 : 0
+            let interactionHeight = isImmersive
+                ? max(0, proxy.size.height - tabBarClearance - exitBarHeight)
+                : InteractiveSurfaceLayout.interactionHeight(in: proxy.size.height)
 
             VStack(spacing: 0) {
                 ZStack {
@@ -267,7 +294,9 @@ private struct FeedCard: View {
                             work: app, url: artifactURL,
                             isActive: isRuntimeActive,
                             accessibilityIdentifier: "published.artifact.player",
-                            telemetryScreen: "feed"
+                            telemetryScreen: "feed",
+                            showsResultControls: !isImmersive,
+                            onInteraction: { if isRuntimeActive { onEnterPlay() } }
                         )
                         .frame(width: proxy.size.width, height: interactionHeight)
                         .clipped()
@@ -280,6 +309,7 @@ private struct FeedCard: View {
                             LivingCanvas(app: app, touchPoint: $touchPoint, isActive: isRuntimeActive)
                                 .allowsHitTesting(isRuntimeActive)
                                 .simultaneousGesture(SpatialTapGesture().onEnded { value in
+                                    if isRuntimeActive { onEnterPlay() }
                                     touchPoint = CGPoint(
                                         x: value.location.x / proxy.size.width,
                                         y: value.location.y / interactionHeight
@@ -308,27 +338,44 @@ private struct FeedCard: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("feed.interaction-surface")
 
-                WorkSummaryPanel(
-                    app: app,
-                    details: { isDetailsPresented = true },
-                    like: requestLike,
-                    comments: requestComments,
-                    remix: onRemix,
-                    share: {
-                        telemetry.record(.shareInvoked, attributes: ["screen_id": "feed"])
-                        isSharePresented = true
-                    },
-                    report: requestReport,
-                    block: requestBlock,
-                    guidelines: { isCommunityGuidelinesPresented = true }
-                )
-                .frame(height: detailsHeight)
+                if !isImmersive {
+                    WorkSummaryPanel(
+                        app: app,
+                        details: { isDetailsPresented = true },
+                        like: requestLike,
+                        comments: requestComments,
+                        remix: onRemix,
+                        share: {
+                            telemetry.record(.shareInvoked, attributes: ["screen_id": "feed"])
+                            isSharePresented = true
+                        },
+                        report: requestReport,
+                        block: requestBlock,
+                        guidelines: { isCommunityGuidelinesPresented = true }
+                    )
+                    .frame(height: detailsHeight)
+                }
 
                 Color.black
                     .frame(height: tabBarClearance)
                     .allowsHitTesting(false)
             }
+            .padding(.top, exitBarHeight)
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+            .overlay(alignment: .topLeading) {
+                if isImmersive {
+                    Button("Exit", action: onExitPlay)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 20)
+                        .frame(height: 44)
+                        .background(.black.opacity(0.85), in: Capsule())
+                        .overlay { Capsule().stroke(.white.opacity(0.45), lineWidth: 1) }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 4)
+                        .accessibilityIdentifier("feed.exit-play")
+                }
+            }
             .background(.black)
         }
         .sheet(isPresented: $isSharePresented) { ShareSheet(app: app) }

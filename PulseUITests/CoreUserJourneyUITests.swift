@@ -168,7 +168,11 @@ final class CoreUserJourneyUITests: XCTestCase {
         let start = player.buttons["START"]
         XCTAssertTrue(start.waitForExistence(timeout: 10), "The other creator’s generated snake did not expose Start")
         assertPlayableControlsAreContained(in: player, app: app, startLabel: "START", pauseLabel: "PAUSE")
+        let browsingPlayerHeight = player.frame.height
         start.tap()
+        XCTAssertTrue(player.buttons["PAUSE"].waitForExistence(timeout: 5), "Entering immersive play swallowed the game's first tap")
+        assertImmersiveFeed(in: app, player: player)
+        XCTAssertGreaterThan(player.frame.height, browsingPlayerHeight, "Immersive play did not reclaim the Feed chrome's space")
         assertPlayableControlsAreContained(in: player, app: app, startLabel: "RESTART", pauseLabel: "PAUSE")
         let down = player.buttons["Down"]
         XCTAssertTrue(down.waitForExistence(timeout: 5), "The other creator’s generated snake did not expose direction controls")
@@ -185,6 +189,36 @@ final class CoreUserJourneyUITests: XCTestCase {
 
         assertHealthyForeground(app)
         attachScreenshot(named: "core-play-other-generated-work", app: app)
+
+        player.buttons["PAUSE"].tap()
+        XCTAssertTrue(player.buttons["RESUME"].waitForExistence(timeout: 5))
+        player.swipeUp()
+        assertImmersiveFeed(in: app, player: player)
+        XCTAssertTrue(player.buttons["RESUME"].exists, "A gameplay swipe paged away or reloaded the paused game")
+        attachScreenshot(named: "home-immersive-play", app: app)
+
+        app.buttons["feed.exit-play"].tap()
+        XCTAssertTrue(app.buttons["Featured"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts[fixture.theme].isHittable, "Exit did not restore the same work's introduction")
+        XCTAssertTrue(player.buttons["RESUME"].exists, "Exit reloaded the game and lost its paused state")
+        assertFeedChromeDoesNotCoverInteraction(in: app)
+        attachScreenshot(named: "home-exit-restored", app: app)
+
+        player.buttons["RESUME"].tap()
+        assertImmersiveFeed(in: app, player: player)
+        app.buttons["app.tab.profile"].tap()
+        XCTAssertTrue(app.buttons["profile.settings"].waitForExistence(timeout: 8), "The bottom navigation was unusable during play")
+        app.buttons["app.tab.home"].tap()
+        XCTAssertTrue(app.buttons["Featured"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["feed.exit-play"].exists, "Returning to Home left immersive mode stuck on")
+        assertFeedChromeDoesNotCoverInteraction(in: app)
+
+        player.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)).tap()
+        assertImmersiveFeed(in: app, player: player)
+        app.buttons["app.tab.home"].tap()
+        XCTAssertTrue(app.buttons["Featured"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["feed.exit-play"].exists, "Reselecting Home did not leave immersive play")
+        assertFeedChromeDoesNotCoverInteraction(in: app)
     }
 
     func testGeneratePublishAndPlayCoreJourney() async throws {
@@ -441,6 +475,23 @@ final class CoreUserJourneyUITests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground, "Pulse left the foreground during the core journey")
         XCTAssertFalse(app.alerts.firstMatch.exists, "A blocking system or product alert remained on screen")
         XCTAssertFalse(app.descendants(matching: .any)["artifact.player.error"].exists, "The active Artifact fell back to an error state")
+    }
+
+    private func assertImmersiveFeed(in app: XCUIApplication, player: XCUIElement) {
+        let exit = app.buttons["feed.exit-play"]
+        XCTAssertTrue(exit.waitForExistence(timeout: 5), "Tapping a Home game did not expose Exit")
+        XCTAssertTrue(exit.isHittable)
+        XCTAssertEqual(app.buttons.matching(identifier: "feed.exit-play").count, 1)
+        XCTAssertFalse(app.buttons["Featured"].exists)
+        XCTAssertFalse(app.buttons["Latest"].exists)
+        XCTAssertFalse(activeFeedSummary(in: app).isHittable, "Author and social controls remained visible during play")
+        XCTAssertFalse(app.buttons["app.creation-status"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["play.result"].isHittable)
+        XCTAssertGreaterThanOrEqual(player.frame.minY, exit.frame.maxY, "Exit covered the game's top controls")
+        for tab in ["app.tab.home", "app.tab.create", "app.tab.profile"] {
+            XCTAssertTrue(app.buttons[tab].isHittable, "Immersive play hid the bottom navigation")
+            XCTAssertLessThanOrEqual(player.frame.maxY, app.buttons[tab].frame.minY, "The game extended behind the bottom navigation")
+        }
     }
 
     private func assertFeedChromeDoesNotCoverInteraction(in app: XCUIApplication) {

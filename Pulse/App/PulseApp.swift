@@ -49,6 +49,7 @@ private struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: AppTab = .home
     @State private var homeTabResetToken = UUID()
+    @State private var isHomeImmersive = false
     @State private var profileTabResetToken = UUID()
     @State private var launchState: PulseLaunchState = .loading
 
@@ -119,6 +120,7 @@ private struct RootView: View {
             ZStack(alignment: .bottom) {
                 HomeTabRoot(
                     isSelected: selectedTab == .home,
+                    isImmersive: $isHomeImmersive,
                     resetToken: homeTabResetToken,
                     reconnect: { Task { await bootstrap() } }
                 )
@@ -151,7 +153,7 @@ private struct RootView: View {
         .ignoresSafeArea(edges: .bottom)
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
-                if let job = appModel.activeCreationJob, selectedTab == .home {
+                if let job = appModel.activeCreationJob, selectedTab == .home, !isHomeImmersive {
                     Button { selectedTab = .create } label: {
                         HStack {
                             if !job.stage.isTerminal { ProgressView().tint(.pulseLime) }

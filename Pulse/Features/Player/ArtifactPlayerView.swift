@@ -11,6 +11,7 @@ struct ArtifactPlayerView: View {
     let telemetryScreen: String
     let playSeed: UInt32?
     let onPlayMessage: ((PulsePlayMessage) -> Void)?
+    let onInteraction: (() -> Void)?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(PulseTelemetry.self) private var telemetry
@@ -25,7 +26,8 @@ struct ArtifactPlayerView: View {
         accessibilityIdentifier: String,
         telemetryScreen: String = "unknown",
         playSeed: UInt32? = nil,
-        onPlayMessage: ((PulsePlayMessage) -> Void)? = nil
+        onPlayMessage: ((PulsePlayMessage) -> Void)? = nil,
+        onInteraction: (() -> Void)? = nil
     ) {
         self.url = url
         self.isActive = isActive
@@ -35,6 +37,7 @@ struct ArtifactPlayerView: View {
         self.telemetryScreen = telemetryScreen
         self.playSeed = playSeed
         self.onPlayMessage = onPlayMessage
+        self.onInteraction = onInteraction
     }
 
     var body: some View {
@@ -50,7 +53,7 @@ struct ArtifactPlayerView: View {
                 reloadToken: reloadToken,
                 loadState: $loadState,
                 accessibilityIdentifier: accessibilityIdentifier,
-                playSeed: playSeed, onPlayMessage: onPlayMessage
+                playSeed: playSeed, onPlayMessage: onPlayMessage, onInteraction: onInteraction
             )
             .opacity(loadState == .ready ? 1 : 0)
 
@@ -170,6 +173,7 @@ private struct ArtifactWebView: UIViewRepresentable {
     let accessibilityIdentifier: String
     let playSeed: UInt32?
     let onPlayMessage: ((PulsePlayMessage) -> Void)?
+    let onInteraction: (() -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(loadState: $loadState)
@@ -185,12 +189,21 @@ private struct ArtifactWebView: UIViewRepresentable {
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
 
         context.coordinator.onPlayMessage = onPlayMessage
+        context.coordinator.onInteraction = onInteraction
         context.coordinator.schemeHandler.playRuntimeEnabled = playSeed != nil
         if let playSeed {
             configuration.userContentController.addUserScript(WKUserScript(source: "globalThis.__pulseSeed = \(playSeed);", injectionTime: .atDocumentStart, forMainFrameOnly: true))
             configuration.userContentController.add(context.coordinator, name: "pulsePlay")
         }
         let webView = WKWebView(frame: .zero, configuration: configuration)
+        // Observe taps without consuming the generated game's input. Resizing
+        // this same web view keeps its document and play session alive.
+        let interactionTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.didTapGame(_:)))
+        interactionTap.cancelsTouchesInView = false
+        interactionTap.delaysTouchesBegan = false
+        interactionTap.delaysTouchesEnded = false
+        interactionTap.delegate = context.coordinator
+        webView.addGestureRecognizer(interactionTap)
         webView.navigationDelegate = context.coordinator
         webView.isOpaque = false
         webView.backgroundColor = .black
@@ -215,6 +228,7 @@ private struct ArtifactWebView: UIViewRepresentable {
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.loadState = $loadState
         context.coordinator.onPlayMessage = onPlayMessage
+        context.coordinator.onInteraction = onInteraction
         context.coordinator.load(url: url, reloadToken: reloadToken, in: webView)
         webView.accessibilityLabel = PulseAccessibility.interactiveSummary(title: title, theme: interactionSummary)
         context.coordinator.setRuntimeMotion(isActive: isActive, reduceMotion: reduceMotion, in: webView)
@@ -228,7 +242,19 @@ private struct ArtifactWebView: UIViewRepresentable {
     }
 
     @MainActor
-    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler, UIGestureRecognizerDelegate {
+        var onInteraction: (() -> Void)?
+
+        @objc func didTapGame(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended, loadState.wrappedValue == .ready else { return }
+            // Deliver the game's tap before the host changes the viewport.
+            DispatchQueue.main.async { [weak self] in self?.onInteraction?() }
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            true
+        }
+
         var onPlayMessage: ((PulsePlayMessage) -> Void)?
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard message.frameInfo.isMainFrame, message.webView === webView,

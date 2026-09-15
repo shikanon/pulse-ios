@@ -11,6 +11,8 @@ struct PlayableWorkView: View {
     let isActive: Bool
     let accessibilityIdentifier: String
     let telemetryScreen: String
+    var showsResultControls = true
+    var onInteraction: (() -> Void)? = nil
     var incomingChallenge: PulseChallenge? = nil
     @State private var play = PulsePlayController()
     @State private var replayToken = UUID()
@@ -31,9 +33,10 @@ struct PlayableWorkView: View {
                     title: work.title, interactionSummary: work.theme,
                     accessibilityIdentifier: accessibilityIdentifier, telemetryScreen: telemetryScreen,
                     playSeed: play.session?.seed,
-                    onPlayMessage: { play.receive($0, api: model.api) })
+                    onPlayMessage: { play.receive($0, api: model.api) },
+                    onInteraction: onInteraction)
                     .id(play.session?.id ?? "untracked")
-                if let score = play.session?.score {
+                if showsResultControls, let score = play.session?.score {
                     VStack(spacing: 10) {
                         HStack {
                             VStack(alignment: .leading, spacing: 3) {
