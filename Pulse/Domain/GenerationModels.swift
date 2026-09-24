@@ -16,7 +16,7 @@ struct GenerationCapabilities: Decodable, Equatable, Sendable {
 struct GenerationAsset: Identifiable, Decodable, Equatable, Sendable {
     enum Status: String, Codable, Sendable { case uploading, ready }
     enum Library: String, Codable, Sendable { case `public`, `private` }
-    enum Source: String, Codable, Sendable { case official, upload }
+    enum Source: String, Codable, Sendable { case official, upload, generated }
     enum Kind: String, Codable, Sendable { case image, audio, video }
 
     let id: UUID

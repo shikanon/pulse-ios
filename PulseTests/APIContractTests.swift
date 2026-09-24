@@ -533,6 +533,24 @@ final class APIContractTests: XCTestCase {
         XCTAssertEqual(legacyAsset.kind, .image)
         XCTAssertEqual(legacyAsset.displayName, "portrait.png")
         XCTAssertNil(legacyAsset.deliveryURL)
+
+        let generatedData = Data(#"""
+        {
+          "id":"9a910ce7-b47a-45df-9ff7-84639a806866",
+          "owner":"you",
+          "library":"private",
+          "source":"generated",
+          "kind":"audio",
+          "displayName":"Generated soundtrack",
+          "fileName":"soundtrack.mp3",
+          "mediaType":"audio/mpeg",
+          "sizeBytes":256,
+          "status":"ready"
+        }
+        """#.utf8)
+        let generatedAsset = try JSONDecoder().decode(GenerationAsset.self, from: generatedData)
+        XCTAssertEqual(generatedAsset.source, .generated)
+        XCTAssertEqual(generatedAsset.kind, .audio)
     }
 
     func testPublishedWorkDecodesArtifactPlayerContract() throws {
